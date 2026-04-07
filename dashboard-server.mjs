@@ -1324,85 +1324,47 @@ app.post('/api/verify-all', async (req, res) => {
       return res.json({ count: 0, results: [], message: 'No pipeline entries to verify' });
     }
 
-    log('INFO', `Batch verifying ${entries.length} pipeline entries`);
+    // Cap at 50 entries to avoid timeout, verify in parallel batches of 10
+    const toVerify = entries.slice(0, 50);
+    log('INFO', `Batch verifying ${toVerify.length} of ${entries.length} pipeline entries`);
 
     const results = [];
 
-    for (const entry of entries) {
+    async function verifyOne(entry) {
       const url = entry.url || entry.URL || entry.Url || '';
+      const company = entry.company || entry.Company || '';
+      const title = entry.title || entry.Title || entry.Role || '';
       if (!url || !url.startsWith('http')) {
-        results.push({
-          url: url || '(no URL)',
-          company: entry.company || entry.Company || '',
-          title: entry.title || entry.Title || entry.Role || '',
-          status: 'error',
-          message: 'Invalid or missing URL',
-        });
-        continue;
+        return { url: url || '(no URL)', company, title, status: 'error', message: 'Invalid URL' };
       }
-
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-
+        const tm = setTimeout(() => controller.abort(), 8000);
         const response = await fetch(url, {
           method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-          },
-          redirect: 'follow',
-          signal: controller.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'text/html' },
+          redirect: 'follow', signal: controller.signal,
         });
-
-        clearTimeout(timeout);
-
-        let status = 'active';
-        let pageTitle = '';
-
-        if (response.status === 404) {
-          status = 'not-found';
-        } else if (response.status >= 400) {
-          status = 'error';
-        } else {
-          const html = await response.text();
-          const lowerHtml = html.toLowerCase();
-
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          pageTitle = titleMatch ? titleMatch[1].trim() : '';
-
-          const closedIndicators = [
-            'this job is no longer available',
-            'this position has been filled',
-            'this job has been closed',
-            'this posting has expired',
-            'no longer accepting applications',
-            'position closed',
-          ];
-
-          if (closedIndicators.some(ind => lowerHtml.includes(ind))) {
-            status = 'closed';
-          }
-        }
-
-        results.push({
-          url,
-          company: entry.company || entry.Company || '',
-          title: pageTitle || entry.title || entry.Title || entry.Role || '',
-          status,
-        });
-      } catch (fetchErr) {
-        results.push({
-          url,
-          company: entry.company || entry.Company || '',
-          title: entry.title || entry.Title || entry.Role || '',
-          status: fetchErr.name === 'AbortError' ? 'error' : 'not-found',
-          message: fetchErr.message,
-        });
+        clearTimeout(tm);
+        if (response.status === 404) return { url, company, title, status: 'not-found' };
+        if (response.status >= 400) return { url, company, title, status: 'error' };
+        const html = await response.text();
+        const lower = html.toLowerCase();
+        const closed = ['this job is no longer available','this position has been filled','this job has been closed','this posting has expired','no longer accepting applications','position closed'];
+        const pageTitle = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1]?.trim() || '';
+        const status = closed.some(c => lower.includes(c)) ? 'closed' : 'active';
+        return { url, company, title: pageTitle || title, status };
+      } catch (err) {
+        return { url, company, title, status: err.name === 'AbortError' ? 'timeout' : 'error', message: err.message };
       }
+    }
 
-      // Small delay between requests to be respectful
-      await new Promise(resolve => setTimeout(resolve, 500));
+    // Process in concurrent batches of 10
+    for (let i = 0; i < toVerify.length; i += 10) {
+      const batch = toVerify.slice(i, i + 10);
+      const batchResults = await Promise.all(batch.map(verifyOne));
+      results.push(...batchResults);
+      if (i + 10 < toVerify.length) await new Promise(r => setTimeout(r, 500));
     }
 
     const summary = {
