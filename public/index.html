@@ -1434,19 +1434,32 @@ function initChat() {
           appendMessage('system', 'Voice agent ready. Type a message or hold the mic button.');
           document.getElementById('chat-status')?.classList.add('connected');
         } else if (msg.type === 'text' && msg.text) {
-          // Stream text immediately -- append to existing agent bubble or create new one
-          const container = document.getElementById('chat-messages');
-          let lastBubble = container.querySelector('.chat-msg.agent.streaming');
-          if (!lastBubble) {
-            lastBubble = document.createElement('div');
-            lastBubble.className = 'chat-msg agent streaming';
-            container.appendChild(lastBubble);
+          // Native audio model sends thinking + spoken text together.
+          // Strip the **Bold Heading** thinking pattern and show the rest.
+          let cleaned = msg.text.replace(/\*\*[^*]+\*\*\s*/g, '').trim();
+          // Remove meta-commentary lines (starts with "I've", "I'm", "My ", "The user", "I acknowledge")
+          cleaned = cleaned.split('\n').filter(line => {
+            const l = line.trim().toLowerCase();
+            return l && !l.startsWith("i've ") && !l.startsWith("i'm ") && !l.startsWith("my ") &&
+                   !l.startsWith("the user") && !l.startsWith("i acknowledge") && !l.startsWith("i need to") &&
+                   !l.startsWith("i should") && !l.startsWith("i want to") && !l.startsWith("i will") &&
+                   !l.startsWith("considering") && !l.startsWith("let me");
+          }).join(' ').trim();
+          if (cleaned) {
+            const container = document.getElementById('chat-messages');
+            let lastBubble = container.querySelector('.chat-msg.agent.streaming');
+            if (!lastBubble) {
+              lastBubble = document.createElement('div');
+              lastBubble.className = 'chat-msg agent streaming';
+              container.appendChild(lastBubble);
+            }
+            agentTextBuffer += cleaned + ' ';
+            lastBubble.textContent = agentTextBuffer.trim();
+            container.scrollTop = container.scrollHeight;
           }
-          agentTextBuffer += msg.text;
-          lastBubble.textContent = agentTextBuffer.trim();
-          container.scrollTop = container.scrollHeight;
+          console.log('[Chat] Model text (raw):', msg.text.slice(0, 80));
         } else if (msg.type === 'transcript' && msg.text) {
-          // Output transcription from native audio model -- use as chat text
+          // Output transcription -- what the model actually SAID (this is the real response)
           const container = document.getElementById('chat-messages');
           let lastBubble = container.querySelector('.chat-msg.agent.streaming');
           if (!lastBubble) {
