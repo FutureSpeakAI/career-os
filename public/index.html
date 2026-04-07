@@ -1572,6 +1572,10 @@ async function sendToChat(text) {
     if (data.error) {
       appendMessage('system', 'Error: ' + data.error);
     } else {
+      if (data.actions?.length) {
+        appendMessage('system', '[ Actions: ' + data.actions.join(', ') + ' ]');
+        loadData(); // Refresh dashboard data after actions
+      }
       appendMessage('agent', data.response);
     }
   } catch (err) {

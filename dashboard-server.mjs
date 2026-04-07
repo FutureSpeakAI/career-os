@@ -2065,10 +2065,25 @@ app.get('/api/conversation/latest', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/chat -- Text chat via Claude API
-// Text chat goes through Claude (not Gemini Live, which is audio-only).
-// This gives proper text responses for typed messages.
+// POST /api/chat -- Text chat via Claude API with tool use
+// Claude can call the same 13 tools as the voice agent.
 // ---------------------------------------------------------------------------
+
+const CLAUDE_TOOLS = [
+  { name: 'scan_portals', description: 'Scan job portals to discover new matching offers. Checks Greenhouse APIs and tracked companies.', input_schema: { type: 'object', properties: {} } },
+  { name: 'evaluate_job', description: 'Evaluate a job description by URL or pasted text.', input_schema: { type: 'object', properties: { url: { type: 'string' }, text: { type: 'string' } } } },
+  { name: 'generate_resume', description: 'Generate a tailored resume for a specific company/role.', input_schema: { type: 'object', properties: { company: { type: 'string' }, role: { type: 'string' } }, required: ['company'] } },
+  { name: 'generate_cover_letter', description: 'Generate a tailored cover letter for a specific role.', input_schema: { type: 'object', properties: { company: { type: 'string' }, role: { type: 'string' } }, required: ['company'] } },
+  { name: 'draft_email', description: 'Draft an email (follow-up, thank you, outreach, etc.)', input_schema: { type: 'object', properties: { recipient: { type: 'string' }, purpose: { type: 'string' }, company: { type: 'string' } }, required: ['purpose'] } },
+  { name: 'verify_listing', description: 'Check if a job listing URL is still active.', input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
+  { name: 'research_company', description: 'Deep research a company: AI strategy, culture, news, Glassdoor, positioning angle.', input_schema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
+  { name: 'update_application_status', description: 'Update the status of a tracked application.', input_schema: { type: 'object', properties: { company: { type: 'string' }, status: { type: 'string', enum: ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP'] } }, required: ['company', 'status'] } },
+  { name: 'save_memory', description: 'Save an important fact, preference, or action item to persistent memory.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ['careerFact','preference','actionItem'] }, content: { type: 'string' } }, required: ['type', 'content'] } },
+  { name: 'add_story', description: 'Add a STAR interview story to the story bank.', input_schema: { type: 'object', properties: { situation: { type: 'string' }, task: { type: 'string' }, action: { type: 'string' }, result: { type: 'string' }, reflection: { type: 'string' } }, required: ['situation','task','action','result'] } },
+  { name: 'get_pipeline', description: 'Get the current list of job offers in the pipeline.', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_tracker', description: 'Get the current applications tracker.', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_recommendations', description: 'Get smart recommendations for what to prioritize this week.', input_schema: { type: 'object', properties: {} } },
+];
 
 app.post('/api/chat', async (req, res) => {
   const { message, history } = req.body;
@@ -2077,79 +2092,96 @@ app.post('/api/chat', async (req, res) => {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
 
-  // Build context-rich system prompt
+  // Build context
   const cvContent = readSafe(join(ROOT, 'cv.md')).slice(0, 3000);
-  const profileContent = readSafe(PATHS.profile).slice(0, 2000);
   const pipelineContent = readSafe(PATHS.pipeline);
   const pipelineCount = (pipelineContent.match(/^- \[/gm) || []).length;
   const trackerContent = readSafe(PATHS.tracker);
   const appCount = (trackerContent.match(/^\|\s*\d+/gm) || []).length;
-
-  // Load memories
   const memoryPath = join(ROOT, 'data', 'agent-memory.json');
   let memories = { careerFacts: [], preferences: [], actionItems: [] };
   try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
 
-  const systemPrompt = `You are Career-OS, Stephen C. Webster's AI career coach and assistant. You are direct, warm, and knowledgeable. You help with:
-- Interview preparation and roleplay
-- Resume and cover letter strategy
-- Job search and application decisions
-- Salary negotiation tactics
-- Career narrative and positioning
+  const systemPrompt = `You are Career-OS, Stephen C. Webster's AI career coach. You are direct, warm, and action-oriented. You have TOOLS -- use them whenever Stephen asks you to DO something. Don't say you can't do things -- you CAN scan for jobs, generate resumes, research companies, etc. Just call the tool.
 
 STEPHEN'S BACKGROUND:
-${cvContent ? cvContent.slice(0, 2000) : 'CV not loaded.'}
+${cvContent.slice(0, 2000)}
 
-CURRENT STATUS:
-- ${pipelineCount} offers in pipeline
-- ${appCount} applications tracked
-- Targeting: CAIO, VP of AI, CTO roles
-- Target comp: $200K+ base
+CURRENT STATUS: ${pipelineCount} offers in pipeline, ${appCount} applications tracked. Targeting CAIO, VP of AI, CTO. Target comp: $200K+ base.
 
 ${memories.careerFacts?.length ? 'KNOWN FACTS:\n' + memories.careerFacts.map(f => '- ' + f.content).join('\n') : ''}
 ${memories.actionItems?.filter(a => a.status === 'pending').length ? 'PENDING ACTIONS:\n' + memories.actionItems.filter(a => a.status === 'pending').map(a => '- ' + a.action).join('\n') : ''}
 
-Keep responses concise (2-4 sentences for simple questions, longer for complex analysis). Be actionable. Use Stephen's actual metrics and proof points when relevant. Don't be sycophantic.`;
+Be concise. Be actionable. When asked to do something, use your tools immediately -- don't ask for permission or more info unless genuinely needed.`;
 
-  // Build messages array from history
+  // Build messages from history
   const messages = [];
   if (history && Array.isArray(history)) {
-    // Include last 10 messages for context
-    const recent = history.slice(-10);
-    for (const msg of recent) {
-      messages.push({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.text || msg.content || ''
-      });
+    for (const msg of history.slice(-10)) {
+      messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.text || msg.content || '' });
     }
   }
   messages.push({ role: 'user', content: message });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages
-      })
-    });
+    // Tool use loop -- Claude may call tools, we execute and continue
+    let toolResults = [];
+    let actionsTaken = [];
+    const MAX_TOOL_ROUNDS = 5;
 
-    if (!response.ok) {
-      const err = await response.text();
-      log('ERROR', `Claude API error: ${response.status} ${err.slice(0, 200)}`);
-      return res.status(500).json({ error: 'Claude API error: ' + response.status });
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const body = {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        system: systemPrompt,
+        tools: CLAUDE_TOOLS,
+        messages
+      };
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        log('ERROR', `Claude API error: ${response.status} ${err.slice(0, 200)}`);
+        return res.status(500).json({ error: 'Claude API error: ' + response.status });
+      }
+
+      const data = await response.json();
+
+      // Check if Claude wants to use tools
+      const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
+      const textBlocks = (data.content || []).filter(b => b.type === 'text');
+
+      if (toolUseBlocks.length === 0 || data.stop_reason !== 'tool_use') {
+        // No more tools -- return the text response
+        const text = textBlocks.map(b => b.text).join('\n') || 'Done.';
+        return res.json({ response: text, actions: actionsTaken });
+      }
+
+      // Execute each tool call
+      messages.push({ role: 'assistant', content: data.content });
+      const toolResultContent = [];
+
+      for (const tool of toolUseBlocks) {
+        log('INFO', `Chat tool call: ${tool.name}(${JSON.stringify(tool.input).slice(0, 80)})`);
+        actionsTaken.push(tool.name);
+        const result = await executeToolCall(tool.name, tool.input || {});
+        toolResultContent.push({
+          type: 'tool_result',
+          tool_use_id: tool.id,
+          content: JSON.stringify(result).slice(0, 4000)
+        });
+      }
+
+      messages.push({ role: 'user', content: toolResultContent });
     }
 
-    const data = await response.json();
-    const text = data.content?.[0]?.text || 'No response generated.';
-    res.json({ response: text });
+    // If we hit max rounds, return what we have
+    res.json({ response: 'Completed ' + actionsTaken.length + ' actions: ' + actionsTaken.join(', '), actions: actionsTaken });
   } catch (err) {
     log('ERROR', `Chat error: ${err.message}`);
     res.status(500).json({ error: err.message });
