@@ -61,7 +61,191 @@ const PATHS = {
 const GEMINI_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
 // Gemini system instruction for the career coach
-const GEMINI_SYSTEM_INSTRUCTION = `You are Stephen C. Webster's AI career coach. You help with interview preparation, salary negotiation roleplay, application strategy, and career advancement. You speak in a direct, encouraging tone. You know Stephen's background: 20 years of journalism (Raw Story EIC, 50K to 5M readers), frontier AI model training (Google, Meta, Amazon), current Senior Director at Aquent Studios, targeting CAIO/VP of AI roles. His target comp is $200K+. When doing interview roleplay, you play the interviewer. When doing negotiation practice, you play the hiring manager. Always push Stephen to be specific with metrics and proof points.`;
+const GEMINI_SYSTEM_INSTRUCTION = `You are Stephen C. Webster's AI career coach inside Career-OS. You are direct, warm, and encouraging. You have TOOLS that let you take real actions -- use them whenever Stephen asks you to do something. Don't say you can't take actions -- you CAN. Available actions: evaluate job descriptions, scan for new jobs, generate resumes/cover letters/emails, verify if job listings are still open, research companies, update application status, save memories, add interview stories, and read/write files like the CV and profile.
+
+Stephen's background: 20 years of journalism (Raw Story EIC, 50K to 5M readers), frontier AI model training (Google, Meta, Amazon), current Senior Director at Aquent Studios, targeting CAIO/VP of AI roles. Target comp: $200K+. When doing interview roleplay, play the interviewer. When doing negotiation practice, play the hiring manager. Always push Stephen to be specific with metrics and proof points.`;
+
+// Gemini function declarations -- these let the voice agent take actions
+const GEMINI_TOOLS = [{
+  functionDeclarations: [
+    {
+      name: 'evaluate_job',
+      description: 'Evaluate a job description by URL or text. Returns a score and analysis.',
+      parameters: { type: 'OBJECT', properties: {
+        url: { type: 'STRING', description: 'URL of the job posting' },
+        text: { type: 'STRING', description: 'Raw job description text (if no URL)' }
+      }}
+    },
+    {
+      name: 'scan_portals',
+      description: 'Scan job portals to discover new matching offers. Checks Greenhouse APIs and tracked companies.',
+      parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+      name: 'generate_resume',
+      description: 'Generate a tailored resume for a specific tracked application.',
+      parameters: { type: 'OBJECT', properties: {
+        company: { type: 'STRING', description: 'Company name' },
+        role: { type: 'STRING', description: 'Role title' }
+      }, required: ['company'] }
+    },
+    {
+      name: 'generate_cover_letter',
+      description: 'Generate a tailored cover letter for a specific role.',
+      parameters: { type: 'OBJECT', properties: {
+        company: { type: 'STRING', description: 'Company name' },
+        role: { type: 'STRING', description: 'Role title' }
+      }, required: ['company'] }
+    },
+    {
+      name: 'draft_email',
+      description: 'Draft an email (follow-up, thank you, response to recruiter, outreach, etc.)',
+      parameters: { type: 'OBJECT', properties: {
+        recipient: { type: 'STRING', description: 'Who the email is to (name or role)' },
+        purpose: { type: 'STRING', description: 'Purpose of the email (follow-up, thank you, cold outreach, etc.)' },
+        company: { type: 'STRING', description: 'Company name if relevant' }
+      }, required: ['purpose'] }
+    },
+    {
+      name: 'verify_listing',
+      description: 'Check if a job listing URL is still active or has been taken down.',
+      parameters: { type: 'OBJECT', properties: {
+        url: { type: 'STRING', description: 'URL to verify' }
+      }, required: ['url'] }
+    },
+    {
+      name: 'research_company',
+      description: 'Deep research a company: AI strategy, culture, recent news, Glassdoor sentiment, and positioning angle.',
+      parameters: { type: 'OBJECT', properties: {
+        company: { type: 'STRING', description: 'Company name to research' }
+      }, required: ['company'] }
+    },
+    {
+      name: 'update_application_status',
+      description: 'Update the status of a tracked application (e.g., mark as Applied, Interview, Rejected).',
+      parameters: { type: 'OBJECT', properties: {
+        company: { type: 'STRING', description: 'Company name' },
+        status: { type: 'STRING', description: 'New status: Evaluated, Applied, Responded, Interview, Offer, Rejected, Discarded, SKIP' }
+      }, required: ['company', 'status'] }
+    },
+    {
+      name: 'save_memory',
+      description: 'Save an important fact, preference, or action item to persistent memory.',
+      parameters: { type: 'OBJECT', properties: {
+        type: { type: 'STRING', description: 'Type: careerFact, preference, or actionItem' },
+        content: { type: 'STRING', description: 'What to remember' }
+      }, required: ['type', 'content'] }
+    },
+    {
+      name: 'add_story',
+      description: 'Add a STAR interview story to the story bank.',
+      parameters: { type: 'OBJECT', properties: {
+        situation: { type: 'STRING', description: 'The situation/context' },
+        task: { type: 'STRING', description: 'The task/challenge' },
+        action: { type: 'STRING', description: 'Actions taken' },
+        result: { type: 'STRING', description: 'Results achieved' },
+        reflection: { type: 'STRING', description: 'What was learned' }
+      }, required: ['situation', 'task', 'action', 'result'] }
+    },
+    {
+      name: 'get_pipeline',
+      description: 'Get the current list of job offers in the pipeline with company, role, and tier.',
+      parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+      name: 'get_tracker',
+      description: 'Get the current applications tracker with status, scores, and notes.',
+      parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+      name: 'get_recommendations',
+      description: 'Get smart recommendations for what to prioritize this week.',
+      parameters: { type: 'OBJECT', properties: {} }
+    }
+  ]
+}];
+
+// Execute a tool call from Gemini and return the result
+async function executeToolCall(name, args) {
+  log('INFO', `Voice agent tool call: ${name}(${JSON.stringify(args).slice(0, 100)})`);
+  const base = `http://localhost:${PORT}`;
+  try {
+    switch (name) {
+      case 'evaluate_job': {
+        const res = await fetch(`${base}/api/evaluate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: args.url, text: args.text }) });
+        return await res.json();
+      }
+      case 'scan_portals': {
+        const res = await fetch(`${base}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        return await res.json();
+      }
+      case 'generate_resume': {
+        const res = await fetch(`${base}/api/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'resume', context: `${args.company} - ${args.role || ''}` }) });
+        return await res.json();
+      }
+      case 'generate_cover_letter': {
+        const res = await fetch(`${base}/api/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cover-letter', context: `${args.company} - ${args.role || ''}` }) });
+        return await res.json();
+      }
+      case 'draft_email': {
+        const res = await fetch(`${base}/api/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'email-draft', context: `To: ${args.recipient || 'recruiter'} at ${args.company || 'company'}, Purpose: ${args.purpose}` }) });
+        return await res.json();
+      }
+      case 'verify_listing': {
+        const res = await fetch(`${base}/api/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: args.url }) });
+        return await res.json();
+      }
+      case 'research_company': {
+        const res = await fetch(`${base}/api/research`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company: args.company }) });
+        return await res.json();
+      }
+      case 'update_application_status': {
+        // Find the application by company name
+        const tracker = readSafe(PATHS.tracker);
+        const match = tracker.match(new RegExp(`^\\|\\s*(\\d+)\\s*\\|[^|]*\\|\\s*${args.company}`, 'mi'));
+        if (match) {
+          const res = await fetch(`${base}/api/tracker/${match[1]}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: args.status }) });
+          return await res.json();
+        }
+        return { error: `Application for ${args.company} not found in tracker` };
+      }
+      case 'save_memory': {
+        const memoryPath = join(ROOT, 'data', 'agent-memory.json');
+        let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+        try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+        const today = new Date().toISOString().split('T')[0];
+        if (args.type === 'careerFact') memories.careerFacts.push({ content: args.content, date: today });
+        else if (args.type === 'preference') memories.preferences.push({ key: args.content.split(':')[0], value: args.content, date: today });
+        else if (args.type === 'actionItem') memories.actionItems.push({ action: args.content, status: 'pending', date: today });
+        writeFileSync(memoryPath, JSON.stringify(memories, null, 2));
+        return { success: true, message: `Saved ${args.type}: ${args.content}` };
+      }
+      case 'add_story': {
+        const res = await fetch(`${base}/api/stories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
+        return await res.json();
+      }
+      case 'get_pipeline': {
+        const content = readSafe(PATHS.pipeline);
+        const entries = parsePipeline(content);
+        return { count: entries.length, top5: entries.slice(0, 5).map(e => `${e.company}: ${e.title} (${e.tier})`) };
+      }
+      case 'get_tracker': {
+        const content = readSafe(PATHS.tracker);
+        const rows = parseTracker(content);
+        return { count: rows.length, entries: rows.slice(0, 10).map(r => `${r.Company || r.company}: ${r.Role || r.role} [${r.Status || r.status}] ${r.Score || r.score || ''}`) };
+      }
+      case 'get_recommendations': {
+        const res = await fetch(`${base}/api/recommendations`);
+        return await res.json();
+      }
+      default:
+        return { error: `Unknown tool: ${name}` };
+    }
+  } catch (err) {
+    log('ERROR', `Tool execution error (${name}): ${err.message}`);
+    return { error: err.message };
+  }
+}
 
 const ROOT = __dirname;
 
@@ -2055,6 +2239,7 @@ wss.on('connection', (clientWs) => {
         systemInstruction: {
           parts: [{ text: systemInstruction }],
         },
+        tools: GEMINI_TOOLS,
       },
     };
 
@@ -2069,7 +2254,7 @@ wss.on('connection', (clientWs) => {
   });
 
   // Proxy: Gemini -> Client (translate Gemini format to simple format)
-  geminiWs.on('message', (data) => {
+  geminiWs.on('message', async (data) => {
     if (!clientClosed && clientWs.readyState === WebSocket.OPEN) {
       try {
         const raw = data.toString();
@@ -2100,6 +2285,29 @@ wss.on('connection', (clientWs) => {
         // Forward turnComplete signal
         if (msg.serverContent?.turnComplete) {
           clientWs.send(JSON.stringify({ type: 'turnComplete' }));
+        }
+        // Handle tool calls from Gemini
+        if (msg.toolCall?.functionCalls) {
+          for (const call of msg.toolCall.functionCalls) {
+            log('INFO', `Gemini tool call: ${call.name}`);
+            // Notify client that an action is being taken
+            clientWs.send(JSON.stringify({ type: 'action', name: call.name, args: call.args }));
+            // Execute the tool
+            const result = await executeToolCall(call.name, call.args || {});
+            // Send result back to Gemini
+            const toolResponse = {
+              toolResponse: {
+                functionResponses: [{
+                  name: call.name,
+                  id: call.id,
+                  response: result
+                }]
+              }
+            };
+            geminiWs.send(JSON.stringify(toolResponse));
+            // Also notify client of the result
+            clientWs.send(JSON.stringify({ type: 'actionResult', name: call.name, result }));
+          }
         }
         // Forward setup complete
         if (msg.setupComplete) {

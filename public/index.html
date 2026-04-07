@@ -1473,6 +1473,12 @@ function initChat() {
           if (!muteAudio && !audioAlwaysMuted) {
             playAudio(msg.audio, msg.mimeType || 'audio/pcm;rate=24000');
           }
+        } else if (msg.type === 'action') {
+          const labels = { evaluate_job:'Evaluating job', scan_portals:'Scanning portals', generate_resume:'Generating resume', generate_cover_letter:'Generating cover letter', draft_email:'Drafting email', verify_listing:'Verifying listing', research_company:'Researching company', update_application_status:'Updating status', save_memory:'Saving to memory', add_story:'Adding story', get_pipeline:'Reading pipeline', get_tracker:'Reading tracker', get_recommendations:'Getting recommendations' };
+          appendMessage('system', '[ ' + (labels[msg.name] || msg.name) + '... ]');
+        } else if (msg.type === 'actionResult') {
+          if (['evaluate_job','scan_portals','update_application_status','save_memory','add_story'].includes(msg.name)) loadData();
+          console.log('[Voice] Action result:', msg.name);
         } else if (msg.type === 'error') {
           appendMessage('system', 'Error: ' + (msg.error || 'Unknown error'));
           console.error('[Chat] Agent error:', msg.error);
