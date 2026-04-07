@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run sync check (setup validation)
+        run: node cv-sync-check.mjs || true
+        # Expected to warn about missing cv.md in CI -- that's fine
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check for personal data leaks
+        run: |
+          # Ensure no personal data is committed
+          ! grep -r "stephencwebster" --include="*.mjs" --include="*.md" --include="*.yml" --include="*.json" . || {
+            echo "ERROR: Personal data found in committed files"
+            exit 1
+          }
+          ! grep -r "512-814" --include="*.mjs" --include="*.md" --include="*.yml" --include="*.json" . || {
+            echo "ERROR: Phone number found in committed files"
+            exit 1
+          }
+          echo "No personal data leaks detected"
+
+      - name: Verify gitignored files are not committed
+        run: |
+          # These files should never be in the repo
+          for f in cv.md config/profile.yml portals.yml data/applications.md article-digest.md SUBMIT-NOW.md; do
+            if [ -f "$f" ]; then
+              echo "ERROR: $f should be gitignored but is committed"
+              exit 1
+            fi
+          done
+          echo "All personal files properly gitignored"
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build dashboard
+        working-directory: dashboard
+        run: go build -o career-dashboard .

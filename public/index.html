@@ -1,0 +1,2076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Career-OS | FutureSpeak.AI</title>
+<link rel="icon" href="https://futurespeak.ai/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#060B19;--bg2:#0F172A;--cy:#00F0FF;--pu:#8A2BE2;
+--glass:rgba(6,11,25,0.6);--border:rgba(0,240,255,0.1);
+--glow:0 0 30px rgba(0,240,255,0.05),inset 0 0 20px rgba(0,240,255,0.02);
+--hover-glow:0 0 20px rgba(0,240,255,0.2);
+--txt:#e2e8f0;--txt2:#94a3b8;--txt3:#64748b;
+--green:#22c55e;--orange:#f59e0b;--red:#ef4444;
+--radius:10px;--radius-sm:6px;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;overflow-x:hidden;font-weight:400;line-height:1.5}
+.mono{font-family:'Fira Code',monospace}
+a{color:var(--cy);text-decoration:none}
+a:hover{text-decoration:underline}
+button{cursor:pointer;font-family:inherit;border:none;background:none}
+input,select{font-family:inherit;background:var(--bg2);color:var(--txt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;outline:none;transition:border .2s}
+input:focus,select:focus{border-color:var(--cy)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#1e293b}
+/* Gradient text */
+.grad-text{background:linear-gradient(135deg,#fff 0%,var(--cy) 50%,var(--pu) 100%);background-size:200% 200%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:gradShift 4s ease infinite}
+@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+/* Glass card */
+.glass{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--glow);transition:box-shadow .3s}
+.glass:hover{box-shadow:var(--hover-glow)}
+/* Pill badges */
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.pill-csuite{background:rgba(138,43,226,.2);color:#b57edc;border:1px solid rgba(138,43,226,.3)}
+.pill-director{background:rgba(0,240,255,.12);color:var(--cy);border:1px solid rgba(0,240,255,.2)}
+.pill-other{background:rgba(100,116,139,.15);color:var(--txt3);border:1px solid rgba(100,116,139,.2)}
+/* Status badges */
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-evaluated{background:rgba(0,240,255,.12);color:var(--cy)}
+.badge-applied{background:rgba(138,43,226,.15);color:#b57edc}
+.badge-responded{background:rgba(0,240,255,.2);color:var(--cy);box-shadow:0 0 8px rgba(0,240,255,.15)}
+.badge-interview{background:rgba(245,158,11,.15);color:var(--orange)}
+.badge-offer{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-rejected{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-discarded{background:rgba(239,68,68,.08);color:#b91c1c}
+.badge-skip{background:rgba(100,116,139,.12);color:var(--txt3)}
+.badge-active{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-closed{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-unchecked{background:rgba(100,116,139,.12);color:var(--txt3)}
+/* Buttons */
+.btn{padding:7px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-cy{background:rgba(0,240,255,.1);color:var(--cy);border:1px solid rgba(0,240,255,.25)}
+.btn-cy:hover{background:rgba(0,240,255,.2);box-shadow:0 0 12px rgba(0,240,255,.15)}
+.btn-pu{background:rgba(138,43,226,.1);color:#b57edc;border:1px solid rgba(138,43,226,.25)}
+.btn-pu:hover{background:rgba(138,43,226,.2);box-shadow:0 0 12px rgba(138,43,226,.15)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-ghost{color:var(--txt2);border:1px solid transparent}
+.btn-ghost:hover{border-color:var(--border);color:var(--txt)}
+/* Layout */
+.container{max-width:1400px;margin:0 auto;padding:0 24px}
+.flex{display:flex}.flex-col{flex-direction:column}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}.gap-6{gap:24px}
+.grid{display:grid}
+/* Header */
+#header{padding:20px 0 12px}
+.brand{display:flex;align-items:center;gap:16px}
+.brand-mark{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--cy),var(--pu));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0}
+.brand h1{font-size:28px;font-weight:700;letter-spacing:-.5px}
+.brand-tagline{font-size:12px;color:var(--txt3);font-weight:300;margin-top:2px}
+.header-links{display:flex;gap:16px;font-size:13px}
+.header-links a{color:var(--txt2);transition:color .2s}
+.header-links a:hover{color:var(--cy)}
+/* Accent line */
+.accent-line{height:2px;background:linear-gradient(90deg,var(--cy),var(--pu));border-radius:1px;margin:0 0 16px}
+/* Target banner */
+.target-banner{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.target-card{padding:16px;text-align:center}
+.target-card .label{font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.target-card .value{font-size:16px;font-weight:600}
+/* Stat cards */
+.stat-row{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:16px}
+.stat-card{padding:14px 10px;text-align:center}
+.stat-card .stat-num{font-family:'Fira Code',monospace;font-size:24px;font-weight:500;color:var(--cy)}
+.stat-card .stat-label{font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.8px;margin-top:4px}
+/* Tabs */
+.tab-nav{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}
+.tab-btn{padding:10px 20px;border-radius:var(--radius);font-size:13px;font-weight:600;color:var(--txt2);background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--border);transition:all .25s}
+.tab-btn:hover{color:var(--txt);border-color:rgba(0,240,255,.2)}
+.tab-btn.active{color:var(--cy);border-color:rgba(0,240,255,.3);background:rgba(0,240,255,.06)}
+/* Tab panels */
+.tab-panel{display:none;animation:fadeIn .3s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* Tables */
+.tbl-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{background:rgba(0,240,255,.04);padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--txt3);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap}
+.tbl td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle}
+.tbl tr:hover td{background:rgba(0,240,255,.02)}
+.tbl .actions{display:flex;gap:4px;flex-wrap:wrap}
+/* Filter bar */
+.filter-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.filter-bar input[type="text"]{flex:1;min-width:200px}
+.filter-bar select{min-width:140px}
+/* Funnel chart */
+.funnel{display:flex;gap:4px;height:28px;border-radius:var(--radius-sm);overflow:hidden;margin-bottom:20px}
+.funnel-seg{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;transition:flex .4s;min-width:24px;color:#fff}
+/* Score colors */
+.score-high{color:var(--green)}.score-good{color:var(--cy)}.score-mid{color:#b57edc}.score-low{color:var(--orange)}.score-bad{color:var(--red)}
+/* Collapsible */
+.collapsible{margin-bottom:12px}
+.collapsible-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none}
+.collapsible-header h3{font-size:15px;font-weight:600}
+.collapsible-arrow{transition:transform .2s;color:var(--txt3);font-size:12px}
+.collapsible.open .collapsible-arrow{transform:rotate(90deg)}
+.collapsible-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.collapsible.open .collapsible-body{max-height:4000px}
+.collapsible-inner{padding:0 16px 16px}
+/* Cards grid */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{padding:20px}
+.card h4{font-size:14px;font-weight:600;margin-bottom:8px}
+.card p{font-size:13px;color:var(--txt2);line-height:1.6}
+/* Bar chart */
+.bar-chart{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-label{width:100px;font-size:12px;color:var(--txt2);text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:22px;background:rgba(255,255,255,.03);border-radius:4px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:4px;transition:width .6s ease;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#fff}
+.bar-fill.cy{background:linear-gradient(90deg,rgba(0,240,255,.3),rgba(0,240,255,.6))}
+.bar-fill.pu{background:linear-gradient(90deg,rgba(138,43,226,.3),rgba(138,43,226,.6))}
+.bar-fill.gn{background:linear-gradient(90deg,rgba(34,197,94,.3),rgba(34,197,94,.6))}
+.bar-fill.or{background:linear-gradient(90deg,rgba(245,158,11,.3),rgba(245,158,11,.6))}
+.bar-fill.rd{background:linear-gradient(90deg,rgba(239,68,68,.3),rgba(239,68,68,.6))}
+/* Market range */
+.range-bar{position:relative;height:28px;background:rgba(255,255,255,.04);border-radius:4px;margin:6px 0}
+.range-fill{position:absolute;height:100%;border-radius:4px;background:linear-gradient(90deg,rgba(0,240,255,.15),rgba(138,43,226,.2))}
+.range-marker{position:absolute;top:-4px;width:2px;height:36px;border-radius:1px}
+.range-marker.current{background:var(--orange)}
+.range-marker.target{background:var(--green)}
+/* Mini stats */
+.mini-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.mini-stat{padding:16px;text-align:center}
+.mini-stat .ms-num{font-family:'Fira Code',monospace;font-size:28px;font-weight:500}
+.mini-stat .ms-label{font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+/* Connector cards */
+.connector-card{padding:20px;display:flex;align-items:center;gap:14px}
+.connector-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.connector-dot.on{background:var(--cy);box-shadow:0 0 8px rgba(0,240,255,.4);animation:pulse 2s infinite}
+.connector-dot.off{background:var(--txt3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* Chatbot sidebar */
+#chat-toggle{display:none}
+#chat-sidebar{position:fixed;right:0;top:0;width:380px;height:100vh;background:rgba(6,11,25,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-left:1px solid var(--border);z-index:999;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.5)}
+.main-content{margin-right:380px}
+.chat-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.chat-header h3{font-size:15px;font-weight:600}
+.chat-status-dot{width:10px;height:10px;border-radius:50%;background:#555;display:inline-block;transition:background .3s}
+.chat-status-dot.connected{background:var(--gr);box-shadow:0 0 8px rgba(34,197,94,.5);animation:pulse 2s infinite}
+.chat-close{font-size:20px;color:var(--txt3);cursor:pointer;padding:4px}
+.chat-close:hover{color:var(--txt)}
+/* Voice visualizer */
+.voice-viz{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:40px;padding:12px 20px}
+.voice-bar{width:4px;border-radius:2px;background:var(--cy);transition:height .1s;opacity:.5}
+.voice-bar.active{opacity:1;animation:barPulse .6s ease infinite alternate}
+@keyframes barPulse{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
+.voice-bar:nth-child(1){animation-delay:0s}.voice-bar:nth-child(2){animation-delay:.08s}.voice-bar:nth-child(3){animation-delay:.16s}
+.voice-bar:nth-child(4){animation-delay:.24s}.voice-bar:nth-child(5){animation-delay:.32s}.voice-bar:nth-child(6){animation-delay:.24s}
+.voice-bar:nth-child(7){animation-delay:.16s}.voice-bar:nth-child(8){animation-delay:.08s}.voice-bar:nth-child(9){animation-delay:0s}
+/* Chat messages */
+.chat-messages{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.chat-msg{max-width:85%;padding:10px 14px;border-radius:var(--radius);font-size:13px;line-height:1.5;word-break:break-word}
+.chat-msg.user{align-self:flex-end;background:rgba(0,240,255,.12);color:var(--cy);border:1px solid rgba(0,240,255,.15)}
+.chat-msg.agent{align-self:flex-start;background:var(--bg2);color:var(--txt);border:1px solid var(--border)}
+/* Chat input */
+.chat-input-bar{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.chat-input-bar input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:10px 16px;color:var(--txt);font-size:13px}
+.chat-input-bar input:focus{border-color:var(--cy)}
+.chat-send,.chat-mic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all .2s;font-size:15px}
+.chat-send{background:rgba(0,240,255,.15);color:var(--cy);border:1px solid rgba(0,240,255,.2)}
+.chat-send:hover{background:rgba(0,240,255,.25)}
+.chat-mic{background:rgba(138,43,226,.15);color:#b57edc;border:1px solid rgba(138,43,226,.2)}
+.chat-mic:hover,.chat-mic.recording{background:rgba(138,43,226,.3);box-shadow:0 0 12px rgba(138,43,226,.3)}
+.audio-toggle{background:none;border:1px solid var(--border);border-radius:6px;color:var(--cy);cursor:pointer;padding:4px 8px;font-size:14px;transition:.2s}
+.audio-toggle:hover{border-color:var(--cy)}
+.audio-toggle.muted{color:var(--t3);opacity:.5}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:2000;display:none;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{width:90%;max-width:700px;max-height:80vh;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,240,255,.08)}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:16px;font-weight:600}
+.modal-body{padding:20px;overflow-y:auto;flex:1;font-size:13px;line-height:1.7;white-space:pre-wrap;font-family:'Fira Code',monospace;color:var(--txt2)}
+.modal-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+/* Loading */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--cy);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.skeleton{background:linear-gradient(90deg,var(--bg2) 25%,rgba(0,240,255,.04) 50%,var(--bg2) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--radius-sm);height:16px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Detail panel */
+.detail-panel{background:var(--bg2);border-top:1px solid var(--border);padding:16px 20px;font-size:13px;line-height:1.7;display:none}
+.detail-panel.open{display:block}
+.detail-panel .detail-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+/* Responsive */
+@media(max-width:1200px){.stat-row{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.target-banner{grid-template-columns:repeat(2,1fr)}.stat-row{grid-template-columns:repeat(4,1fr)}.mini-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:900px){.main-content{margin-right:0}#chat-sidebar{width:100%;right:-100%;transition:right .3s}#chat-sidebar.open{right:0}#chat-toggle{display:flex!important;position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:1000;width:36px;height:80px;background:linear-gradient(180deg,var(--cy),var(--pu));border-radius:8px 0 0 8px;align-items:center;justify-content:center;color:#fff;font-size:18px;cursor:pointer}}
+@media(max-width:600px){.stat-row{grid-template-columns:repeat(2,1fr)}.tab-nav{gap:4px}.tab-btn{padding:8px 12px;font-size:12px}}
+/* Expanded row */
+.row-expanded{background:rgba(0,240,255,.02)}
+/* Roleplay section */
+.roleplay-section{padding:24px;margin-top:16px;text-align:center}
+.roleplay-section h3{font-size:18px;margin-bottom:16px}
+.roleplay-controls{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.roleplay-controls select{min-width:160px}
+.roleplay-start{padding:14px 32px;font-size:15px;font-weight:700;background:linear-gradient(135deg,var(--cy),var(--pu));color:#fff;border-radius:var(--radius);transition:all .3s;border:none}
+.roleplay-start:hover{box-shadow:0 0 30px rgba(0,240,255,.3);transform:translateY(-1px)}
+/* Comp cards */
+.comp-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+.comp-card{padding:20px;text-align:center}
+.comp-card .comp-label{font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px}
+.comp-card .comp-value{font-family:'Fira Code',monospace;font-size:24px;font-weight:500;margin-top:6px}
+/* Error */
+.error-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius-sm);padding:12px 16px;color:var(--red);font-size:13px;margin:12px 0}
+/* Prep cards grid */
+.prep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.prep-card{padding:18px;cursor:pointer;transition:all .2s}
+.prep-card:hover{border-color:rgba(0,240,255,.3);transform:translateY(-2px)}
+.prep-card h4{font-size:14px;margin-bottom:4px;color:var(--cy)}
+.prep-card p{font-size:12px;color:var(--txt3)}
+/* Calendar grid */
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:20px}
+.calendar-header{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--txt3);text-align:center;padding:8px 0;font-weight:600}
+.calendar-day{min-height:70px;background:var(--glass);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px;font-size:12px;position:relative;transition:border-color .2s}
+.calendar-day:hover{border-color:rgba(0,240,255,.2)}
+.calendar-day .day-num{font-family:'Fira Code',monospace;font-size:11px;color:var(--txt3);margin-bottom:4px}
+.calendar-day.today .day-num{color:var(--cy);font-weight:700}
+.calendar-day.other-month{opacity:.3}
+.calendar-event{font-size:9px;padding:2px 5px;border-radius:10px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.calendar-event.evt-interview{background:rgba(245,158,11,.2);color:var(--orange)}
+.calendar-event.evt-prep{background:rgba(0,240,255,.15);color:var(--cy)}
+.calendar-event.evt-followup{background:rgba(138,43,226,.2);color:#b57edc}
+.calendar-event.evt-deadline{background:rgba(239,68,68,.2);color:var(--red)}
+/* Tab badges */
+.tab-btn{position:relative}
+.tab-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+.tab-badge.hidden{display:none}
+/* Editor textarea */
+.editor-area{width:100%;min-height:300px;background:var(--bg);color:var(--cy);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'Fira Code',monospace;font-size:13px;line-height:1.6;resize:vertical;outline:none;transition:border-color .2s}
+.editor-area:focus{border-color:var(--cy);box-shadow:0 0 20px rgba(0,240,255,.05)}
+.editor-section{margin-bottom:24px}
+.editor-section h4{font-size:14px;font-weight:600;margin-bottom:8px;color:var(--txt)}
+.editor-section .editor-actions{display:flex;gap:8px;margin-top:8px}
+/* Toast notifications */
+.toast-container{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{padding:12px 24px;border-radius:var(--radius);font-size:13px;font-weight:600;animation:toastIn .3s ease;backdrop-filter:blur(12px);border:1px solid var(--border);max-width:500px}
+.toast-success{background:rgba(34,197,94,.15);color:var(--green);border-color:rgba(34,197,94,.3)}
+.toast-error{background:rgba(239,68,68,.15);color:var(--red);border-color:rgba(239,68,68,.3)}
+.toast-info{background:rgba(0,240,255,.1);color:var(--cy);border-color:rgba(0,240,255,.2)}
+@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+/* Research cards */
+.research-card{padding:20px;margin-bottom:12px}
+.research-card h4{font-size:14px;font-weight:600;margin-bottom:8px;color:var(--cy)}
+.research-card p{font-size:13px;color:var(--txt2);line-height:1.7}
+/* Inbox */
+.inbox-item{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .2s}
+.inbox-item:hover{background:rgba(0,240,255,.02)}
+.inbox-item.unread{border-left:3px solid var(--cy)}
+.inbox-item .inbox-from{font-size:13px;font-weight:600;color:var(--txt)}
+.inbox-item .inbox-subject{font-size:13px;color:var(--txt2)}
+.inbox-item .inbox-snippet{font-size:12px;color:var(--txt3);margin-top:2px}
+.inbox-item .inbox-date{font-size:11px;color:var(--txt3);font-family:'Fira Code',monospace;white-space:nowrap}
+.inbox-category{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;text-transform:uppercase}
+.inbox-category.cat-interview{background:rgba(245,158,11,.15);color:var(--orange)}
+.inbox-category.cat-response{background:rgba(0,240,255,.12);color:var(--cy)}
+.inbox-category.cat-rejection{background:rgba(239,68,68,.15);color:var(--red)}
+.inbox-category.cat-other{background:rgba(100,116,139,.12);color:var(--txt3)}
+/* Keyboard hints */
+.kb-hint{font-size:10px;color:var(--txt3);padding:2px 6px;border:1px solid var(--border);border-radius:3px;font-family:'Fira Code',monospace;margin-left:6px;opacity:.6}
+/* Story form */
+.story-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.story-form textarea{width:100%;min-height:60px;background:var(--bg);color:var(--txt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-family:inherit;font-size:13px;resize:vertical;outline:none}
+.story-form textarea:focus{border-color:var(--cy)}
+.story-form .full-width{grid-column:1/-1}
+/* Recommendation cards */
+.rec-card{padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
+.rec-urgency{width:8px;height:40px;border-radius:4px;flex-shrink:0}
+.rec-urgency.urgency-high{background:var(--red)}
+.rec-urgency.urgency-medium{background:var(--orange)}
+.rec-urgency.urgency-low{background:var(--green)}
+.rec-card .rec-info h4{font-size:13px;font-weight:600}
+.rec-card .rec-info p{font-size:12px;color:var(--txt2)}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="container main-content">
+  <div id="header" class="flex justify-between items-center">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div>
+        <h1 class="grad-text">Career-OS</h1>
+        <div class="brand-tagline">FutureSpeak.AI | Career Advancement OS</div>
+      </div>
+    </div>
+    <div class="header-links">
+      <a href="#" id="link-linkedin" target="_blank">LinkedIn</a>
+      <a href="#" id="link-github" target="_blank">GitHub</a>
+      <a href="https://futurespeak.ai" target="_blank">FutureSpeak.AI</a>
+    </div>
+  </div>
+
+  <div class="accent-line"></div>
+
+  <!-- TARGET BANNER -->
+  <div class="target-banner" id="target-banner">
+    <div class="glass target-card"><div class="label mono">Operator</div><div class="value" id="t-name">--</div></div>
+    <div class="glass target-card"><div class="label mono">North Star</div><div class="value" id="t-northstar">--</div></div>
+    <div class="glass target-card"><div class="label mono">Target</div><div class="value" id="t-target">--</div></div>
+    <div class="glass target-card"><div class="label mono">Location</div><div class="value" id="t-location">--</div></div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stat-row" id="stat-row">
+    <div class="glass stat-card"><div class="stat-num" id="s-pipeline">0</div><div class="stat-label mono">Pipeline</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-vp">0</div><div class="stat-label mono">VP/C-Suite</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-director">0</div><div class="stat-label mono">Director+</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-apps">0</div><div class="stat-label mono">Applications</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-reports">0</div><div class="stat-label mono">Reports</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-interviews">0</div><div class="stat-label mono">Interviews</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-contacts">0</div><div class="stat-label mono">Contacts</div></div>
+    <div class="glass stat-card"><div class="stat-num" id="s-response">0%</div><div class="stat-label mono">Response Rate</div></div>
+  </div>
+
+  <!-- TAB NAVIGATION -->
+  <div class="tab-nav" id="tab-nav">
+    <button class="tab-btn active" data-tab="pipeline">Pipeline</button>
+    <button class="tab-btn" data-tab="tracker">Tracker</button>
+    <button class="tab-btn" data-tab="interview">Interview Prep</button>
+    <button class="tab-btn" data-tab="crm">CRM</button>
+    <button class="tab-btn" data-tab="comp">Comp Lab</button>
+    <button class="tab-btn" data-tab="brand">Brand</button>
+    <button class="tab-btn" data-tab="analytics">Analytics</button>
+    <button class="tab-btn" data-tab="connectors">Connectors</button>
+    <button class="tab-btn" data-tab="inbox">Inbox<span class="tab-badge hidden" id="badge-inbox"></span></button>
+    <button class="tab-btn" data-tab="calendar">Calendar</button>
+    <button class="tab-btn" data-tab="research">Research</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+  </div>
+
+  <!-- ==================== TAB PANELS ==================== -->
+  <div id="panels">
+
+    <!-- PIPELINE -->
+    <div class="tab-panel active" id="panel-pipeline">
+      <div class="filter-bar">
+        <input type="text" id="pipe-search" placeholder="Search pipeline...">
+        <select id="pipe-tier">
+          <option value="all">All Tiers</option>
+          <option value="c-suite">C-Suite</option>
+          <option value="director">Director</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn btn-cy" onclick="openEvaluateModal()">Evaluate JD</button>
+        <button class="btn btn-pu" id="scan-btn" onclick="runScan()">Run Scan</button>
+        <button class="btn btn-pu" id="verify-all-btn" onclick="verifyAll()">Verify All Listings</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl" id="pipeline-table">
+          <thead><tr><th>#</th><th>Company</th><th>Role</th><th>Tier</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="pipeline-body"><tr><td colspan="6"><div class="skeleton" style="width:100%;height:200px"></div></td></tr></tbody>
+        </table>
+      </div>
+      <div id="scan-stats" class="flex gap-4 items-center" style="margin-top:12px;font-size:12px;color:var(--txt3)"></div>
+    </div>
+
+    <!-- TRACKER -->
+    <div class="tab-panel" id="panel-tracker">
+      <div id="tracker-funnel" class="funnel"></div>
+      <div class="filter-bar">
+        <input type="text" id="track-search" placeholder="Search applications...">
+        <select id="track-status">
+          <option value="all">All Statuses</option>
+          <option value="evaluated">Evaluated</option>
+          <option value="applied">Applied</option>
+          <option value="responded">Responded</option>
+          <option value="interview">Interview</option>
+          <option value="offer">Offer</option>
+          <option value="rejected">Rejected</option>
+          <option value="discarded">Discarded</option>
+          <option value="skip">SKIP</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl" id="tracker-table">
+          <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Role</th><th>Score</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="tracker-body"><tr><td colspan="7"><div class="skeleton" style="width:100%;height:200px"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- INTERVIEW PREP -->
+    <div class="tab-panel" id="panel-interview">
+      <div class="collapsible open glass" style="margin-bottom:20px">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Story Bank (STAR+R)</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner">
+          <div class="tbl-wrap">
+            <table class="tbl" id="story-table">
+              <thead><tr><th>Title</th><th>Situation</th><th>Competency</th></tr></thead>
+              <tbody id="story-body"><tr><td colspan="3" style="color:var(--txt3);font-size:13px">Stories will populate from your story bank</td></tr></tbody>
+            </table>
+          </div>
+        </div></div>
+      </div>
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">Meeting Prep Briefs</h3>
+      <div class="prep-grid" style="margin-bottom:24px">
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','interview')"><h4>Interview Prep</h4><p>Full behavioral + technical brief</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','recruiter')"><h4>Recruiter Screen</h4><p>Elevator pitch + key questions</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','networking')"><h4>Networking Call</h4><p>Talking points + ask strategy</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','negotiation')"><h4>Negotiation Call</h4><p>BATNA + anchoring strategy</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','client')"><h4>Client Meeting</h4><p>Stakeholder map + agenda</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','conference')"><h4>Conference Speaking</h4><p>Talk outline + audience hooks</p></div>
+        <div class="glass prep-card" onclick="generateContent('interview-prep','','resignation')"><h4>Resignation</h4><p>Script + transition plan</p></div>
+      </div>
+      <div class="glass roleplay-section">
+        <h3 class="grad-text">Interview Roleplay</h3>
+        <p style="color:var(--txt2);margin-bottom:16px;font-size:13px">Practice with a voice-powered AI interviewer</p>
+        <div class="roleplay-controls">
+          <select id="rp-role"><option value="">Select Application...</option></select>
+          <select id="rp-difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <select id="rp-mode">
+            <option value="behavioral">Behavioral</option>
+            <option value="technical">Technical</option>
+            <option value="case-study">Case Study</option>
+            <option value="negotiation">Negotiation</option>
+          </select>
+        </div>
+        <button class="roleplay-start" onclick="startRoleplay()">Start Roleplay</button>
+      </div>
+      <div style="text-align:center;margin-top:16px">
+        <button class="btn btn-cy" onclick="generateContent('interview-prep','')">Generate Prep Brief</button>
+      </div>
+      <div class="collapsible glass" style="margin-top:20px">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Add STAR Story</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner">
+          <div class="story-form">
+            <div class="full-width"><textarea id="ip-story-situation" placeholder="Situation -- What was the context?"></textarea></div>
+            <textarea id="ip-story-task" placeholder="Task -- What was your goal?"></textarea>
+            <textarea id="ip-story-action" placeholder="Action -- What did you do?"></textarea>
+            <textarea id="ip-story-result" placeholder="Result -- What happened?"></textarea>
+            <textarea id="ip-story-reflection" placeholder="Reflection -- What did you learn?"></textarea>
+            <div class="full-width"><input type="text" id="ip-story-tags" placeholder="Tags (e.g. leadership, AI strategy)" style="width:100%"></div>
+            <div class="full-width"><button class="btn btn-cy" onclick="addStoryFromPrep()">Add Story</button></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- CRM -->
+    <div class="tab-panel" id="panel-crm">
+      <div class="filter-bar">
+        <input type="text" id="crm-search" placeholder="Search contacts...">
+      </div>
+      <div class="tbl-wrap" style="margin-bottom:20px">
+        <table class="tbl" id="contacts-table">
+          <thead><tr><th>Name</th><th>Company</th><th>Role</th><th>How Met</th><th>Last Contact</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="contacts-body"><tr><td colspan="7"><div class="skeleton" style="width:100%;height:120px"></div></td></tr></tbody>
+        </table>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Follow-up Queue</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="followup-queue"><p style="color:var(--txt3);font-size:13px">No pending follow-ups</p></div></div>
+      </div>
+      <div class="collapsible glass" style="margin-top:12px">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Outreach Templates</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="outreach-templates"><p style="color:var(--txt3);font-size:13px">Templates will load from your CRM data</p></div></div>
+      </div>
+    </div>
+
+    <!-- COMP LAB -->
+    <div class="tab-panel" id="panel-comp">
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">Your Numbers</h3>
+      <div class="comp-cards" id="comp-cards">
+        <div class="glass comp-card"><div class="comp-label mono">Current</div><div class="comp-value" id="comp-current" style="color:var(--orange)">$154K</div></div>
+        <div class="glass comp-card"><div class="comp-label mono">Target</div><div class="comp-value" id="comp-target" style="color:var(--green)">$200K+</div></div>
+        <div class="glass comp-card"><div class="comp-label mono">Walk-Away</div><div class="comp-value" id="comp-walkaway" style="color:var(--red)">$175K</div></div>
+      </div>
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">Market Range</h3>
+      <div id="market-ranges" style="margin-bottom:24px">
+        <div class="bar-row" style="margin-bottom:12px"><div class="bar-label mono">CAIO</div>
+          <div class="bar-track"><div class="bar-fill cy" style="width:85%">$250-400K</div></div></div>
+        <div class="bar-row" style="margin-bottom:12px"><div class="bar-label mono">VP AI</div>
+          <div class="bar-track"><div class="bar-fill pu" style="width:72%">$200-350K</div></div></div>
+        <div class="bar-row" style="margin-bottom:12px"><div class="bar-label mono">CTO</div>
+          <div class="bar-track"><div class="bar-fill cy" style="width:65%">$200-300K</div></div></div>
+        <div class="bar-row" style="margin-bottom:12px"><div class="bar-label mono">Sr. Director</div>
+          <div class="bar-track"><div class="bar-fill pu" style="width:55%">$175-250K</div></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Negotiation Playbook</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="negotiation-playbook"><p style="color:var(--txt3);font-size:13px">Playbook content loads from comp-lab data</p></div></div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn btn-pu" onclick="startNegotiationRoleplay()">Practice Negotiation</button>
+      </div>
+    </div>
+
+    <!-- BRAND -->
+    <div class="tab-panel" id="panel-brand">
+      <div class="collapsible open glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Brand Positioning</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="brand-positioning"><p style="color:var(--txt3);font-size:13px">Brand positioning content loads from your brand data</p></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Content Calendar</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="content-calendar"><p style="color:var(--txt3);font-size:13px">Content calendar loads from your brand data</p></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Engagement Metrics</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="engagement-metrics"><p style="color:var(--txt3);font-size:13px">Engagement data loads from your tracker</p></div></div>
+      </div>
+      <h3 style="font-size:16px;margin:20px 0 14px;font-weight:600">Article Digest</h3>
+      <div class="cards-grid" id="article-digest">
+        <div class="glass card"><p style="color:var(--txt3)">Proof points load from article-digest.md</p></div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn btn-cy" onclick="generateContent('email-draft','','linkedin post about career AI')">Generate LinkedIn Post</button>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="tab-panel" id="panel-analytics">
+      <div class="collapsible open glass" style="margin-bottom:20px">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Smart Recommendations</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner">
+          <div id="recommendations-content"><p style="color:var(--txt3);font-size:13px">Click to load recommendations</p></div>
+          <button class="btn btn-cy" style="margin-top:12px" onclick="getRecommendations()">Get This Week's Priorities</button>
+        </div></div>
+      </div>
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">Velocity</h3>
+      <div class="mini-stats" id="velocity-stats">
+        <div class="glass mini-stat"><div class="ms-num" id="v-evaluated" style="color:var(--cy)">0</div><div class="ms-label mono">Evaluated</div></div>
+        <div class="glass mini-stat"><div class="ms-num" id="v-applied" style="color:#b57edc">0</div><div class="ms-label mono">Applied</div></div>
+        <div class="glass mini-stat"><div class="ms-num" id="v-interviews" style="color:var(--orange)">0</div><div class="ms-label mono">Interviews</div></div>
+        <div class="glass mini-stat"><div class="ms-num" id="v-response" style="color:var(--green)">0%</div><div class="ms-label mono">Response Rate</div></div>
+      </div>
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">Score Distribution</h3>
+      <div class="bar-chart" id="score-dist" style="margin-bottom:24px"></div>
+      <h3 style="font-size:16px;margin:20px 0 14px;font-weight:600">Status Funnel</h3>
+      <div class="bar-chart" id="status-funnel" style="margin-bottom:24px"></div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Reports</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="reports-list"><p style="color:var(--txt3);font-size:13px">No reports yet</p></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Rejection Patterns</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="rejection-patterns"><p style="color:var(--txt3);font-size:13px">Rejection analysis loads from analytics data</p></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Weekly Review</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner" id="weekly-review"><p style="color:var(--txt3);font-size:13px">Weekly review template loads from analytics data</p></div></div>
+      </div>
+    </div>
+
+    <!-- CONNECTORS -->
+    <div class="tab-panel" id="panel-connectors">
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">MCP Services</h3>
+      <div class="cards-grid" style="margin-bottom:24px" id="mcp-services">
+        <div class="glass connector-card"><div class="connector-dot on"></div><div><h4 style="font-size:14px;font-weight:600">Gmail</h4><p style="font-size:12px;color:var(--txt3)">Email integration via MCP</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot on"></div><div><h4 style="font-size:14px;font-weight:600">Google Calendar</h4><p style="font-size:12px;color:var(--txt3)">Meeting scheduling</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot on"></div><div><h4 style="font-size:14px;font-weight:600">Box</h4><p style="font-size:12px;color:var(--txt3)">Document storage</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot on"></div><div><h4 style="font-size:14px;font-weight:600">Canva</h4><p style="font-size:12px;color:var(--txt3)">Design assets</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot on"></div><div><h4 style="font-size:14px;font-weight:600">Figma</h4><p style="font-size:12px;color:var(--txt3)">Design collaboration</p></div></div>
+      </div>
+      <h3 style="font-size:16px;margin-bottom:14px;font-weight:600">API Keys</h3>
+      <div class="cards-grid" style="margin-bottom:24px" id="api-keys">
+        <div class="glass connector-card"><div class="connector-dot off"></div><div><h4 style="font-size:14px;font-weight:600">OpenAI</h4><p style="font-size:12px;color:var(--txt3)">Not configured</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot off"></div><div><h4 style="font-size:14px;font-weight:600">Anthropic</h4><p style="font-size:12px;color:var(--txt3)">Not configured</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot off"></div><div><h4 style="font-size:14px;font-weight:600">Gemini</h4><p style="font-size:12px;color:var(--txt3)">Not configured</p></div></div>
+        <div class="glass connector-card"><div class="connector-dot off"></div><div><h4 style="font-size:14px;font-weight:600">LinkedIn</h4><p style="font-size:12px;color:var(--txt3)">Not configured</p></div></div>
+      </div>
+      <div class="collapsible glass">
+        <div class="collapsible-header" onclick="toggleCollapse(this)">
+          <h3>Setup Guide</h3>
+          <span class="collapsible-arrow">&#9654;</span>
+        </div>
+        <div class="collapsible-body"><div class="collapsible-inner">
+          <p style="color:var(--txt2);font-size:13px;line-height:1.7">
+            <strong>MCP Services</strong> are connected via Claude Code's MCP protocol. They appear automatically when configured in your Claude Code settings.<br><br>
+            <strong>API Keys</strong> should be set in your <code>.env</code> file. Copy <code>.env.example</code> and fill in the values.<br><br>
+            Run <code>/career-os setup</code> to configure everything interactively.
+          </p>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- INBOX -->
+    <div class="tab-panel" id="panel-inbox">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="font-size:16px;font-weight:600">Email Inbox</h3>
+        <span style="font-size:12px;color:var(--txt3)">Placeholder data -- connect Gmail MCP for live inbox</span>
+      </div>
+      <div class="glass" style="border-radius:var(--radius);overflow:hidden" id="inbox-list">
+        <div style="padding:40px;text-align:center;color:var(--txt3)">Loading inbox...</div>
+      </div>
+      <div class="glass" style="margin-top:16px;padding:20px">
+        <h4 style="font-size:14px;font-weight:600;margin-bottom:8px">Connect Live Inbox</h4>
+        <p style="font-size:13px;color:var(--txt2);line-height:1.7">To use live email data, configure the Gmail MCP server in your Claude Code settings. Once connected, this tab will show your real inbox filtered for career-related emails.</p>
+      </div>
+    </div>
+
+    <!-- CALENDAR -->
+    <div class="tab-panel" id="panel-calendar">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="font-size:16px;font-weight:600" id="cal-month-title">Calendar</h3>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-ghost" onclick="changeCalMonth(-1)">&larr; Prev</button>
+          <button class="btn btn-sm btn-ghost" onclick="changeCalMonth(1)">Next &rarr;</button>
+          <button class="btn btn-sm btn-cy" onclick="showToast('Schedule block added (placeholder)','info')">Schedule Prep Block</button>
+        </div>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <h4 style="font-size:14px;font-weight:600;margin:20px 0 12px">Upcoming Events</h4>
+      <div id="upcoming-events" class="glass" style="padding:16px;border-radius:var(--radius)">
+        <p style="color:var(--txt3);font-size:13px">No upcoming events</p>
+      </div>
+      <div class="glass" style="margin-top:16px;padding:20px">
+        <p style="font-size:12px;color:var(--txt3)">Placeholder data -- connect Google Calendar MCP in Claude Code for live events</p>
+      </div>
+    </div>
+
+    <!-- RESEARCH -->
+    <div class="tab-panel" id="panel-research">
+      <div class="filter-bar" style="margin-bottom:20px">
+        <input type="text" id="research-input" placeholder="Enter company name..." style="flex:1" onkeydown="if(event.key==='Enter')researchCompany()">
+        <button class="btn btn-cy" id="research-btn" onclick="researchCompany()">Research</button>
+      </div>
+      <div id="research-results">
+        <div class="glass" style="padding:40px;text-align:center">
+          <p style="color:var(--txt3);font-size:14px">Enter a company name above and click Research to get AI-powered intelligence</p>
+          <p style="color:var(--txt3);font-size:12px;margin-top:8px">Includes AI strategy, culture, recent news, and your positioning angle</p>
+        </div>
+      </div>
+      <div id="research-cache" style="margin-top:20px;display:none">
+        <h4 style="font-size:14px;font-weight:600;margin-bottom:12px">Recent Researches</h4>
+        <div id="research-cache-list" class="flex gap-2" style="flex-wrap:wrap"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab-panel" id="panel-settings">
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:16px">Settings &amp; Editors</h3>
+      <div class="editor-section glass" style="padding:20px">
+        <h4>CV Editor <span class="kb-hint">cv.md</span></h4>
+        <textarea class="editor-area" id="editor-cv" placeholder="Loading cv.md..."></textarea>
+        <div class="editor-actions">
+          <button class="btn btn-cy" onclick="saveFile('cv')">Save CV</button>
+          <button class="btn btn-ghost" onclick="loadFileEditor('cv')">Reload</button>
+        </div>
+      </div>
+      <div class="editor-section glass" style="padding:20px">
+        <h4>Profile Editor <span class="kb-hint">config/profile.yml</span></h4>
+        <textarea class="editor-area" id="editor-profile" placeholder="Loading profile.yml..."></textarea>
+        <div class="editor-actions">
+          <button class="btn btn-cy" onclick="saveFile('profile')">Save Profile</button>
+          <button class="btn btn-ghost" onclick="loadFileEditor('profile')">Reload</button>
+        </div>
+      </div>
+      <div class="editor-section glass" style="padding:20px">
+        <h4>Portal Manager <span class="kb-hint">portals.yml</span></h4>
+        <textarea class="editor-area" id="editor-portals" placeholder="Loading portals.yml..."></textarea>
+        <div class="editor-actions">
+          <button class="btn btn-cy" onclick="saveFile('portals')">Save Portals</button>
+          <button class="btn btn-ghost" onclick="loadFileEditor('portals')">Reload</button>
+        </div>
+      </div>
+      <div class="editor-section glass" style="padding:20px">
+        <h4>Add STAR Story</h4>
+        <div class="story-form" id="story-form">
+          <div class="full-width"><textarea id="story-situation" placeholder="Situation -- What was the context?"></textarea></div>
+          <textarea id="story-task" placeholder="Task -- What was your goal?"></textarea>
+          <textarea id="story-action" placeholder="Action -- What did you do?"></textarea>
+          <textarea id="story-result" placeholder="Result -- What happened?"></textarea>
+          <textarea id="story-reflection" placeholder="Reflection -- What did you learn?"></textarea>
+          <div class="full-width"><input type="text" id="story-tags" placeholder="Tags (comma-separated, e.g. leadership, AI strategy)" style="width:100%"></div>
+          <div class="full-width"><button class="btn btn-cy" onclick="addStory()">Add Story</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+</div><!-- /container -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- CHATBOT SIDEBAR -->
+<div id="chat-toggle" onclick="toggleChat()" title="Open Career-OS Agent">&#9993;</div>
+<div id="chat-sidebar">
+  <div class="chat-header">
+    <h3 class="grad-text">Career-OS Agent</h3>
+    <span id="chat-status" class="chat-status-dot" title="Connecting..."></span>
+    <button id="audio-toggle" class="audio-toggle" onclick="toggleAudioMode()" title="Toggle voice responses">&#128266;</button>
+    <span class="chat-close" onclick="toggleChat()">&times;</span>
+  </div>
+  <div class="voice-viz" id="voice-viz">
+    <div class="voice-bar" style="height:8px"></div>
+    <div class="voice-bar" style="height:14px"></div>
+    <div class="voice-bar" style="height:20px"></div>
+    <div class="voice-bar" style="height:30px"></div>
+    <div class="voice-bar" style="height:36px"></div>
+    <div class="voice-bar" style="height:30px"></div>
+    <div class="voice-bar" style="height:20px"></div>
+    <div class="voice-bar" style="height:14px"></div>
+    <div class="voice-bar" style="height:8px"></div>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg agent">Welcome to Career-OS. I can help you with interview prep, resume generation, job research, and more. How can I help?</div>
+  </div>
+  <div class="chat-input-bar">
+    <input type="text" id="chat-input" placeholder="Ask Career-OS..." onkeydown="if(event.key==='Enter')sendMessage()">
+    <button class="chat-send" onclick="sendMessage()" title="Send">&#9654;</button>
+    <button class="chat-mic" id="mic-btn" onmousedown="startVoice()" onmouseup="stopVoice()" ontouchstart="startVoice()" ontouchend="stopVoice()" title="Hold to talk">&#127908;</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal glass">
+    <div class="modal-head">
+      <h3 id="modal-title">Generated Content</h3>
+      <span style="cursor:pointer;font-size:20px;color:var(--txt3)" onclick="closeModal()">&times;</span>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn btn-cy" onclick="copyModalContent()">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Career-OS SPA -- vanilla JS
+   ============================================================ */
+const API = '';  // same origin
+let DATA = { profile:null, pipeline:[], tracker:[], contacts:[], reports:[], analytics:null, brand:null, comp:null, connectors:null };
+let ws = null;
+let mediaRecorder = null;
+let audioStream = null;
+let isRecording = false;
+let muteAudio = false;
+let audioAlwaysMuted = false;
+let conversationMessages = [];
+let messagesSinceExtract = 0;
+
+/* ---------- Data Loading ---------- */
+async function loadData() {
+  const endpoints = [
+    ['profile','/api/profile'],['pipeline','/api/pipeline'],['tracker','/api/tracker'],
+    ['contacts','/api/contacts'],['reports','/api/reports'],['analytics','/api/analytics'],
+    ['brand','/api/brand'],['comp','/api/comp'],['connectors','/api/connectors'],
+    ['stories','/api/stories'],['followups','/api/followups'],['outreach','/api/outreach'],
+    ['inbox','/api/inbox'],['calendar','/api/calendar']
+  ];
+  const results = await Promise.allSettled(
+    endpoints.map(([key, url]) => fetch(API + url).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }).then(d => [key, d]))
+  );
+  results.forEach(r => {
+    if (r.status === 'fulfilled') {
+      const [key, val] = r.value;
+      DATA[key] = val;
+    }
+  });
+  // Normalize API responses: unwrap { count, entries/rows } into plain arrays
+  if (DATA.pipeline?.entries) DATA.pipeline = DATA.pipeline.entries;
+  if (DATA.tracker?.rows) DATA.tracker = DATA.tracker.rows;
+  if (DATA.contacts?.rows) DATA.contacts = DATA.contacts.rows;
+  if (DATA.followups?.rows) DATA.followups = DATA.followups.rows;
+  if (DATA.storyBank?.rows) DATA.storyBank = DATA.storyBank.rows;
+  if (!Array.isArray(DATA.pipeline)) DATA.pipeline = [];
+  if (!Array.isArray(DATA.tracker)) DATA.tracker = [];
+  if (!Array.isArray(DATA.contacts)) DATA.contacts = [];
+  if (!Array.isArray(DATA.reports)) DATA.reports = [];
+  renderAll();
+}
+
+function renderAll() {
+  renderProfile();
+  renderStats();
+  renderPipeline();
+  renderTracker();
+  renderTrackerFunnel();
+  renderInterviewPrep();
+  renderCRM();
+  renderComp();
+  renderBrand();
+  renderAnalytics();
+  renderConnectors();
+  renderInbox();
+  renderCalendar();
+  updateTabBadges();
+}
+
+/* ---------- Profile & Banner ---------- */
+function renderProfile() {
+  const p = DATA.profile;
+  if (!p) return;
+  const c = p.candidate || p;
+  document.getElementById('t-name').textContent = c.full_name || c.name || '--';
+  document.getElementById('t-location').textContent = (p.location && p.location.city ? p.location.city + ', ' + (p.location.country||'') : c.location) || '--';
+  if (c.linkedin) { const el = document.getElementById('link-linkedin'); el.href = c.linkedin.startsWith('http') ? c.linkedin : 'https://' + c.linkedin; }
+  if (c.github) { const el = document.getElementById('link-github'); el.href = c.github.startsWith('http') ? c.github : 'https://' + c.github; }
+  const tr = p.target_roles || {};
+  const primary = tr.primary;
+  if (primary && primary.length) {
+    document.getElementById('t-northstar').textContent = primary[0];
+  } else if (p.north_star) {
+    document.getElementById('t-northstar').textContent = p.north_star;
+  }
+  const comp = p.compensation || {};
+  document.getElementById('t-target').textContent = comp.target_range || comp.target || '--';
+}
+
+/* ---------- Stats ---------- */
+function renderStats() {
+  const t = DATA.tracker || [];
+  const p = DATA.pipeline || [];
+  const c = DATA.contacts || [];
+  const statusCount = (s) => t.filter(r => r.status && r.status.toLowerCase() === s).length;
+  const csuite = p.filter(r => classifyTier(r.role || r.title || '') === 'c-suite').length;
+  const director = p.filter(r => classifyTier(r.role || r.title || '') === 'director').length;
+  document.getElementById('s-pipeline').textContent = p.length;
+  document.getElementById('s-vp').textContent = csuite;
+  document.getElementById('s-director').textContent = director;
+  document.getElementById('s-apps').textContent = t.length;
+  document.getElementById('s-reports').textContent = (DATA.reports || []).length;
+  document.getElementById('s-interviews').textContent = statusCount('interview');
+  document.getElementById('s-contacts').textContent = c.length;
+  const applied = statusCount('applied') + statusCount('responded') + statusCount('interview') + statusCount('offer') + statusCount('rejected');
+  const responded = statusCount('responded') + statusCount('interview') + statusCount('offer');
+  const rate = applied > 0 ? Math.round((responded / applied) * 100) : 0;
+  document.getElementById('s-response').textContent = rate + '%';
+}
+
+function classifyTier(role) {
+  const r = role.toLowerCase();
+  if (/\b(vp|vice president|c-suite|chief|cto|cio|coo|ceo|caio|cmo|svp|evp|president)\b/.test(r)) return 'c-suite';
+  if (/\b(director|head of|principal)\b/.test(r)) return 'director';
+  return 'other';
+}
+
+/* ---------- Pipeline ---------- */
+function renderPipeline() {
+  const tbody = document.getElementById('pipeline-body');
+  const rows = DATA.pipeline || [];
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--txt3);text-align:center;padding:40px">No pipeline entries. Run <code>/career-os scan</code> to populate.</td></tr>'; return; }
+  tbody.innerHTML = rows.map((r, i) => {
+    const role = r.role || r.title || 'Unknown';
+    const tier = classifyTier(role);
+    const pillClass = tier === 'c-suite' ? 'pill-csuite' : tier === 'director' ? 'pill-director' : 'pill-other';
+    const statusBadge = r.verified === true ? '<span class="badge badge-active">Active</span>' : r.verified === false ? '<span class="badge badge-closed">Closed</span>' : '<span class="badge badge-unchecked">Unchecked</span>';
+    const url = r.url || r.link || '#';
+    return `<tr data-idx="${i}" data-tier="${tier}" data-company="${esc(r.company||'')}" data-role="${esc(role)}">
+      <td class="mono">${r.num || i+1}</td>
+      <td><a href="#" onclick="event.preventDefault();researchCompany('${esc(r.company||'')}')" style="color:var(--txt);text-decoration:none;border-bottom:1px dashed var(--border)" title="Research ${esc(r.company||'')}">${esc(r.company || '--')}</a></td>
+      <td>${esc(role)}</td>
+      <td><span class="pill ${pillClass}">${tier}</span></td>
+      <td>${statusBadge}</td>
+      <td class="actions">
+        <a href="${esc(url)}" target="_blank" class="btn btn-sm btn-ghost">View JD</a>
+        <button class="btn btn-sm btn-cy verify-btn" onclick="verifyListing(${i}, this)">Verify</button>
+        <button class="btn btn-sm btn-pu" onclick="generateContent('resume','${i}')">Evaluate</button>
+      </td></tr>`;
+  }).join('');
+}
+
+async function verifyListing(idx, btn) {
+  const r = DATA.pipeline[idx];
+  if (!r) return;
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API + '/api/verify', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url: r.url || r.link })
+    });
+    const data = await res.json();
+    r.verified = data.status === 'active';
+    const row = btn.closest('tr');
+    const statusTd = row.querySelectorAll('td')[4];
+    statusTd.innerHTML = r.verified ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-closed">Closed</span>';
+  } catch(e) { showError('Verification failed: ' + e.message); }
+  btn.textContent = 'Verify';
+  btn.disabled = false;
+}
+
+async function verifyAll() {
+  const btn = document.getElementById('verify-all-btn');
+  btn.innerHTML = '<span class="spinner"></span> Verifying...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API + '/api/verify-all', { method: 'POST' });
+    const data = await res.json();
+    if (data.results) {
+      data.results.forEach(r => {
+        const entry = DATA.pipeline.find(p => (p.url||p.link) === r.url);
+        if (entry) entry.verified = r.status === 'active';
+      });
+      renderPipeline();
+    }
+  } catch(e) { showError('Batch verification failed: ' + e.message); }
+  btn.textContent = 'Verify All Listings';
+  btn.disabled = false;
+}
+
+/* ---------- Tracker ---------- */
+function renderTracker() {
+  const tbody = document.getElementById('tracker-body');
+  const rows = DATA.tracker || [];
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--txt3);text-align:center;padding:40px">No applications tracked yet</td></tr>'; return; }
+  tbody.innerHTML = rows.map((r, i) => {
+    const score = parseFloat(r.score) || 0;
+    const sc = score >= 4.5 ? 'score-high' : score >= 4.0 ? 'score-good' : score >= 3.5 ? 'score-mid' : score >= 3.0 ? 'score-low' : 'score-bad';
+    const st = (r.status || 'evaluated').toLowerCase().replace(/\s+/g,'');
+    const badgeClass = 'badge-' + st;
+    return `<tr data-idx="${i}" data-status="${st}" class="tracker-row" onclick="toggleDetail(this, ${i})">
+      <td class="mono">${r.num || i+1}</td>
+      <td class="mono" style="font-size:12px">${esc(r.date || '--')}</td>
+      <td>${esc(r.company || '--')}</td>
+      <td>${esc(r.role || '--')}</td>
+      <td class="mono ${sc}" style="font-weight:600">${r.score || '--'}</td>
+      <td><span class="badge ${badgeClass}">${esc(r.status || 'Evaluated')}</span></td>
+      <td class="actions" onclick="event.stopPropagation()">
+        <button class="btn btn-sm btn-cy" onclick="generateContent('resume','${r.num||i}')">Resume</button>
+        <button class="btn btn-sm btn-pu" onclick="generateContent('cover-letter','${r.num||i}')">Cover</button>
+        <button class="btn btn-sm btn-ghost" onclick="generateContent('email-draft','${r.num||i}')">Email</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportPackage(${r.num||i})">Export Pkg</button>
+        <select class="btn btn-sm" style="background:var(--bg2);font-size:11px;padding:4px 6px" onchange="updateStatus(${r.num||i}, this.value)">
+          <option value="">Status...</option>
+          <option value="Evaluated">Evaluated</option>
+          <option value="Applied">Applied</option>
+          <option value="Responded">Responded</option>
+          <option value="Interview">Interview</option>
+          <option value="Offer">Offer</option>
+          <option value="Rejected">Rejected</option>
+          <option value="Discarded">Discarded</option>
+          <option value="SKIP">SKIP</option>
+        </select>
+      </td></tr>
+      <tr class="detail-row" id="detail-${i}" style="display:none"><td colspan="7">
+        <div class="detail-panel open">
+          <div style="color:var(--txt2);font-size:13px">${r.report ? esc(r.report) : 'No report available. Click "Resume" to generate.'}</div>
+          <div class="detail-actions">
+            <button class="btn btn-sm btn-cy" onclick="generateContent('interview-prep','${r.num||i}')">Prep Interview</button>
+            <button class="btn btn-sm btn-ghost" onclick="openReportInChat(${r.num||i})">Open in Chat</button>
+          </div>
+        </div>
+      </td></tr>`;
+  }).join('');
+  populateRoleplayDropdown(rows);
+}
+
+function toggleDetail(row, idx) {
+  const detail = document.getElementById('detail-' + idx);
+  if (!detail) return;
+  const isOpen = detail.style.display === 'table-row';
+  document.querySelectorAll('.detail-row').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('.tracker-row').forEach(r => r.classList.remove('row-expanded'));
+  if (!isOpen) {
+    detail.style.display = 'table-row';
+    row.classList.add('row-expanded');
+  }
+}
+
+async function updateStatus(num, status) {
+  if (!status) return;
+  try {
+    await fetch(API + '/api/tracker/' + num, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status })
+    });
+    const entry = DATA.tracker.find(r => (r.num || 0) == num);
+    if (entry) entry.status = status;
+    renderTracker();
+    renderTrackerFunnel();
+    renderStats();
+  } catch(e) { showError('Status update failed: ' + e.message); }
+}
+
+function renderTrackerFunnel() {
+  const el = document.getElementById('tracker-funnel');
+  const rows = DATA.tracker || [];
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const counts = {};
+  const order = ['evaluated','applied','responded','interview','offer','rejected','discarded','skip'];
+  const colors = { evaluated:'rgba(0,240,255,.6)', applied:'rgba(138,43,226,.6)', responded:'rgba(0,240,255,.8)', interview:'rgba(245,158,11,.6)', offer:'rgba(34,197,94,.6)', rejected:'rgba(239,68,68,.6)', discarded:'rgba(239,68,68,.3)', skip:'rgba(100,116,139,.4)' };
+  order.forEach(s => counts[s] = 0);
+  rows.forEach(r => { const s = (r.status||'evaluated').toLowerCase().replace(/\s+/g,''); if (counts[s] !== undefined) counts[s]++; else counts.evaluated++; });
+  const total = rows.length || 1;
+  el.innerHTML = order.filter(s => counts[s] > 0).map(s =>
+    `<div class="funnel-seg" style="flex:${counts[s]};background:${colors[s]}" title="${s}: ${counts[s]}">${counts[s]}</div>`
+  ).join('');
+}
+
+/* ---------- Interview Prep ---------- */
+function renderInterviewPrep() {
+  const stories = DATA.stories || [];
+  if (stories.length) {
+    const tbody = document.getElementById('story-body');
+    tbody.innerHTML = stories.map(s =>
+      `<tr><td>${esc(s.title||'')}</td><td style="color:var(--txt2);font-size:12px">${esc(s.situation||'')}</td><td><span class="pill pill-director">${esc(s.competency||'')}</span></td></tr>`
+    ).join('');
+  }
+}
+
+function populateRoleplayDropdown(rows) {
+  const sel = document.getElementById('rp-role');
+  sel.innerHTML = '<option value="">Select Application...</option>' +
+    (rows||[]).map(r => `<option value="${r.num||''}">${esc(r.company||'')} - ${esc(r.role||'')}</option>`).join('');
+}
+
+function startRoleplay() {
+  const roleId = document.getElementById('rp-role').value;
+  const diff = document.getElementById('rp-difficulty').value;
+  const mode = document.getElementById('rp-mode').value;
+  openChat();
+  const app = DATA.tracker.find(r => String(r.num) === roleId);
+  const ctx = app ? `${app.company} - ${app.role}` : 'general practice';
+  sendToChat(`Start an interview roleplay for ${ctx}. Difficulty: ${diff}. Mode: ${mode}. Act as the interviewer and begin with your first question.`);
+}
+
+function startNegotiationRoleplay() {
+  openChat();
+  sendToChat('Start a salary negotiation roleplay. You are the hiring manager. I am the candidate. My target is $200K+. Begin the conversation.');
+}
+
+/* ---------- CRM ---------- */
+function renderCRM() {
+  const tbody = document.getElementById('contacts-body');
+  const contacts = DATA.contacts || [];
+  if (!contacts.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--txt3);text-align:center;padding:30px">No contacts yet. Use <code>/career-os outreach</code> to add.</td></tr>'; return; }
+  tbody.innerHTML = contacts.map((c, i) =>
+    `<tr>
+      <td><a href="#" onclick="event.preventDefault();openChat();sendToChat('Draft outreach to ${esc(c.name||'')} at ${esc(c.company||'')}')" style="color:var(--cy);cursor:pointer">${esc(c.name||'')}</a></td><td>${esc(c.company||'')}</td><td>${esc(c.role||'')}</td>
+      <td>${esc(c.how_met||'')}</td><td class="mono" style="font-size:12px">${esc(c.last_contact||'')}</td>
+      <td>${esc(c.status||'')}</td>
+      <td><button class="btn btn-sm btn-cy" onclick="generateContent('email-draft','','outreach to ${esc(c.name||'')} at ${esc(c.company||'')}')">Draft Outreach</button></td>
+    </tr>`
+  ).join('');
+  const followups = DATA.followups || [];
+  if (followups.length) {
+    document.getElementById('followup-queue').innerHTML = followups.map(f =>
+      `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt2)">${esc(f.name||'')} - ${esc(f.action||'')} <span class="mono" style="font-size:11px;color:var(--txt3)">${esc(f.due||'')}</span></div>`
+    ).join('');
+  }
+  const templates = DATA.outreach || [];
+  if (templates.length) {
+    document.getElementById('outreach-templates').innerHTML = '<div class="cards-grid">' + templates.map(t =>
+      `<div class="glass card"><h4>${esc(t.name||t.title||'')}</h4><p>${esc(t.preview||t.content||'').slice(0,120)}...</p></div>`
+    ).join('') + '</div>';
+  }
+}
+
+/* ---------- Comp Lab ---------- */
+function renderComp() {
+  const comp = DATA.comp || DATA.profile?.compensation;
+  if (!comp) return;
+  if (comp.current) document.getElementById('comp-current').textContent = comp.current;
+  if (comp.target || comp.target_range) document.getElementById('comp-target').textContent = comp.target || comp.target_range;
+  if (comp.walkaway || comp.minimum) document.getElementById('comp-walkaway').textContent = comp.walkaway || comp.minimum;
+}
+
+/* ---------- Brand ---------- */
+function renderBrand() {
+  const brand = DATA.brand;
+  if (!brand) return;
+  if (brand.positioning) document.getElementById('brand-positioning').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(brand.positioning)}</p>`;
+  if (brand.calendar) document.getElementById('content-calendar').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(brand.calendar)}</p>`;
+  if (brand.articles && brand.articles.length) {
+    document.getElementById('article-digest').innerHTML = brand.articles.map(a =>
+      `<div class="glass card"><h4>${esc(a.title||'')}</h4><p>${esc(a.summary||a.metric||'')}</p></div>`
+    ).join('');
+  }
+}
+
+/* ---------- Analytics ---------- */
+function renderAnalytics() {
+  const t = DATA.tracker || [];
+  const statusCount = (s) => t.filter(r => (r.status||'').toLowerCase() === s).length;
+  // Velocity
+  document.getElementById('v-evaluated').textContent = statusCount('evaluated');
+  document.getElementById('v-applied').textContent = statusCount('applied');
+  document.getElementById('v-interviews').textContent = statusCount('interview');
+  const applied = statusCount('applied') + statusCount('responded') + statusCount('interview') + statusCount('offer') + statusCount('rejected');
+  const responded = statusCount('responded') + statusCount('interview') + statusCount('offer');
+  document.getElementById('v-response').textContent = (applied > 0 ? Math.round(responded/applied*100) : 0) + '%';
+
+  // Score distribution
+  const scores = t.map(r => parseFloat(r.score)||0).filter(s => s > 0);
+  const bins = [
+    { label: '4.5+', count: scores.filter(s=>s>=4.5).length, cls: 'gn' },
+    { label: '4.0-4.4', count: scores.filter(s=>s>=4.0&&s<4.5).length, cls: 'cy' },
+    { label: '3.5-3.9', count: scores.filter(s=>s>=3.5&&s<4.0).length, cls: 'pu' },
+    { label: '3.0-3.4', count: scores.filter(s=>s>=3.0&&s<3.5).length, cls: 'or' },
+    { label: '<3.0', count: scores.filter(s=>s<3.0).length, cls: 'rd' }
+  ];
+  const maxBin = Math.max(...bins.map(b=>b.count), 1);
+  document.getElementById('score-dist').innerHTML = bins.map(b =>
+    `<div class="bar-row"><div class="bar-label mono">${b.label}</div><div class="bar-track"><div class="bar-fill ${b.cls}" style="width:${(b.count/maxBin)*100}%">${b.count}</div></div></div>`
+  ).join('');
+
+  // Status funnel (vertical bar chart)
+  const statuses = ['evaluated','applied','responded','interview','offer','rejected','discarded','skip'];
+  const colors = { evaluated:'cy', applied:'pu', responded:'cy', interview:'or', offer:'gn', rejected:'rd', discarded:'rd', skip:'pu' };
+  const sCounts = statuses.map(s => ({ label: s.charAt(0).toUpperCase()+s.slice(1), count: statusCount(s), cls: colors[s] }));
+  const maxS = Math.max(...sCounts.map(s=>s.count), 1);
+  document.getElementById('status-funnel').innerHTML = sCounts.filter(s=>s.count>0).map(s =>
+    `<div class="bar-row"><div class="bar-label mono">${s.label}</div><div class="bar-track"><div class="bar-fill ${s.cls}" style="width:${(s.count/maxS)*100}%">${s.count}</div></div></div>`
+  ).join('');
+
+  // Reports list
+  const reports = DATA.reports || [];
+  if (reports.length) {
+    document.getElementById('reports-list').innerHTML = reports.map(r =>
+      `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px"><span class="mono" style="color:var(--cy)">${esc(r.num||'')}</span> ${esc(r.company||'')} - ${esc(r.role||'')} <span style="color:var(--txt3);font-size:11px">${esc(r.date||'')}</span></div>`
+    ).join('');
+  }
+}
+
+/* ---------- Connectors ---------- */
+function renderConnectors() {
+  const c = DATA.connectors;
+  if (!c) return;
+  if (c.mcp && Array.isArray(c.mcp)) {
+    document.getElementById('mcp-services').innerHTML = c.mcp.map(s =>
+      `<div class="glass connector-card"><div class="connector-dot ${s.connected?'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(s.name)}</h4><p style="font-size:12px;color:var(--txt3)">${esc(s.description||'')}</p></div></div>`
+    ).join('');
+  }
+  if (c.apis && Array.isArray(c.apis)) {
+    document.getElementById('api-keys').innerHTML = c.apis.map(s =>
+      `<div class="glass connector-card"><div class="connector-dot ${s.configured?'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(s.name)}</h4><p style="font-size:12px;color:var(--txt3)">${s.configured?'Configured':'Not configured'}</p></div></div>`
+    ).join('');
+  }
+}
+
+/* ---------- Filters ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+  // Pipeline filters
+  const pipeSearch = document.getElementById('pipe-search');
+  const pipeTier = document.getElementById('pipe-tier');
+  const filterPipe = () => {
+    const q = pipeSearch.value.toLowerCase();
+    const tier = pipeTier.value;
+    document.querySelectorAll('#pipeline-body tr[data-idx]').forEach(row => {
+      const matchQ = !q || (row.dataset.company||'').toLowerCase().includes(q) || (row.dataset.role||'').toLowerCase().includes(q);
+      const matchT = tier === 'all' || row.dataset.tier === tier;
+      row.style.display = matchQ && matchT ? '' : 'none';
+    });
+  };
+  pipeSearch.addEventListener('input', filterPipe);
+  pipeTier.addEventListener('change', filterPipe);
+
+  // Tracker filters
+  const trackSearch = document.getElementById('track-search');
+  const trackStatus = document.getElementById('track-status');
+  const filterTrack = () => {
+    const q = trackSearch.value.toLowerCase();
+    const st = trackStatus.value;
+    document.querySelectorAll('#tracker-body tr.tracker-row').forEach(row => {
+      const tds = row.querySelectorAll('td');
+      const company = (tds[2]?.textContent||'').toLowerCase();
+      const role = (tds[3]?.textContent||'').toLowerCase();
+      const matchQ = !q || company.includes(q) || role.includes(q);
+      const matchS = st === 'all' || row.dataset.status === st;
+      const idx = row.dataset.idx;
+      const detailRow = document.getElementById('detail-' + idx);
+      row.style.display = matchQ && matchS ? '' : 'none';
+      if (detailRow && !(matchQ && matchS)) detailRow.style.display = 'none';
+    });
+  };
+  trackSearch.addEventListener('input', filterTrack);
+  trackStatus.addEventListener('change', filterTrack);
+
+  // CRM filter
+  const crmSearch = document.getElementById('crm-search');
+  crmSearch.addEventListener('input', () => {
+    const q = crmSearch.value.toLowerCase();
+    document.querySelectorAll('#contacts-body tr').forEach(row => {
+      const text = row.textContent.toLowerCase();
+      row.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+  });
+});
+
+/* ---------- Tabs ---------- */
+const tabMap = { pipeline:'panel-pipeline', tracker:'panel-tracker', interview:'panel-interview', crm:'panel-crm', comp:'panel-comp', brand:'panel-brand', analytics:'panel-analytics', connectors:'panel-connectors', inbox:'panel-inbox', calendar:'panel-calendar', research:'panel-research', settings:'panel-settings' };
+
+document.getElementById('tab-nav').addEventListener('click', e => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  switchTab(btn.dataset.tab);
+});
+
+var switchTab = function(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(tabMap[tab]);
+  if (panel) panel.classList.add('active');
+  history.replaceState(null, '', '#' + tab);
+  // Lazy-load settings editors
+  if (tab === 'settings' && !switchTab._settingsLoaded) {
+    switchTab._settingsLoaded = true;
+    loadFileEditor('cv');
+    loadFileEditor('profile');
+    loadFileEditor('portals');
+  }
+};
+
+// Hash routing
+function routeFromHash() {
+  const hash = location.hash.replace('#','');
+  if (tabMap[hash]) switchTab(hash);
+}
+window.addEventListener('hashchange', routeFromHash);
+window.addEventListener('load', () => { if (location.hash) routeFromHash(); });
+
+/* ---------- Collapsibles ---------- */
+function toggleCollapse(header) {
+  header.closest('.collapsible').classList.toggle('open');
+}
+
+/* ---------- Generate Content (AI) ---------- */
+async function generateContent(type, roleId, context) {
+  openModal('Generating...', '<div style="text-align:center;padding:40px"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Generating content with AI...</div>');
+  try {
+    const res = await fetch(API + '/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, roleId, context })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    const titles = { 'resume': 'Generated Resume', 'cover-letter': 'Cover Letter', 'email-draft': 'Draft Email', 'interview-prep': 'Interview Prep Brief' };
+    openModal(titles[type] || 'Generated Content', esc(data.content || data.text || JSON.stringify(data, null, 2)));
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Failed to generate content: ' + esc(e.message) + '</div>');
+  }
+}
+
+/* ---------- Modal ---------- */
+function openModal(title, body) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function copyModalContent() {
+  const text = document.getElementById('modal-body').innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.modal-foot .btn-cy');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
+  });
+}
+
+/* ---------- Chat / Voice ---------- */
+let agentTextBuffer = '';
+let agentReady = false;
+
+function initChat() {
+  if (ws && ws.readyState <= 1) return; // Don't create duplicate connections
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = proto + '//' + location.host + '/ws/gemini';
+    console.log('[Chat] Connecting to', url);
+    ws = new WebSocket(url);
+    ws.onopen = () => {
+      console.log('[Chat] WebSocket open');
+      appendMessage('system', 'Connecting to Gemini voice agent...');
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        console.log('[Chat] Received:', msg.type || 'unknown', msg.text ? msg.text.slice(0,50) : '');
+        if (msg.type === 'ready') {
+          agentReady = true;
+          appendMessage('system', 'Voice agent ready. Type a message or hold the mic button.');
+          document.getElementById('chat-status')?.classList.add('connected');
+        } else if (msg.type === 'text' && msg.text) {
+          // Stream text immediately -- append to existing agent bubble or create new one
+          const container = document.getElementById('chat-messages');
+          let lastBubble = container.querySelector('.chat-msg.agent.streaming');
+          if (!lastBubble) {
+            lastBubble = document.createElement('div');
+            lastBubble.className = 'chat-msg agent streaming';
+            container.appendChild(lastBubble);
+          }
+          agentTextBuffer += msg.text;
+          lastBubble.textContent = agentTextBuffer.trim();
+          container.scrollTop = container.scrollHeight;
+        } else if (msg.type === 'turnComplete') {
+          // Finalize the streaming bubble
+          const container = document.getElementById('chat-messages');
+          const streaming = container.querySelector('.chat-msg.agent.streaming');
+          if (streaming) {
+            streaming.classList.remove('streaming');
+            // Track for persistence
+            if (agentTextBuffer.trim()) {
+              conversationMessages.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
+              messagesSinceExtract++;
+              if (conversationMessages.length % 5 === 0) saveConversation();
+              if (messagesSinceExtract >= 10) { extractMemories(); messagesSinceExtract = 0; }
+              try {
+                const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
+                stored.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
+                if (stored.length > 100) stored.splice(0, stored.length - 100);
+                localStorage.setItem('career-os-chat', JSON.stringify(stored));
+              } catch {}
+            }
+          }
+          agentTextBuffer = '';
+          muteAudio = false;
+          muteAudio = false; // Reset for next interaction
+        } else if (msg.type === 'audio' && msg.audio) {
+          if (!muteAudio && !audioAlwaysMuted) {
+            playAudio(msg.audio, msg.mimeType || 'audio/pcm;rate=24000');
+          }
+        } else if (msg.type === 'error') {
+          appendMessage('system', 'Error: ' + (msg.error || 'Unknown error'));
+          console.error('[Chat] Agent error:', msg.error);
+        }
+      } catch(err) {
+        console.error('[Chat] Parse error:', err, e.data?.slice?.(0,100));
+        appendMessage('agent', e.data);
+      }
+    };
+    ws.onerror = (err) => {
+      console.error('[Chat] WebSocket error:', err);
+    };
+    ws.onclose = (e) => {
+      console.log('[Chat] WebSocket closed:', e.code, e.reason);
+      ws = null;
+      agentReady = false;
+      document.getElementById('chat-status')?.classList.remove('connected');
+      appendMessage('system', 'Disconnected. Reconnecting in 3s...');
+      setTimeout(initChat, 3000);
+    };
+  } catch(e) { console.error('[Chat] Init failed:', e); }
+}
+
+function toggleChat() {
+  document.getElementById('chat-sidebar').classList.toggle('open');
+}
+
+function openChat() {
+  document.getElementById('chat-sidebar').classList.add('open');
+}
+
+function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  sendToChat(text);
+}
+
+function sendToChat(text) {
+  appendMessage('user', text);
+  muteAudio = true; // Mute audio for text-initiated messages
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'text', content: text }));
+  } else {
+    appendMessage('agent', 'Connection lost. Reconnecting...');
+    initChat();
+  }
+}
+
+function appendMessage(role, text) {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+
+  // Track for persistence
+  if (role === 'user' || role === 'agent') {
+    conversationMessages.push({ role, text, time: new Date().toISOString() });
+    messagesSinceExtract++;
+
+    // Auto-save every 5 messages
+    if (conversationMessages.length % 5 === 0) {
+      saveConversation();
+    }
+
+    // Extract memories every 10 turns
+    if (messagesSinceExtract >= 10) {
+      extractMemories();
+      messagesSinceExtract = 0;
+    }
+  }
+
+  // Also save to localStorage for quick restore
+  try {
+    const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
+    stored.push({ role, text, time: new Date().toISOString() });
+    // Keep last 100 messages
+    if (stored.length > 100) stored.splice(0, stored.length - 100);
+    localStorage.setItem('career-os-chat', JSON.stringify(stored));
+  } catch {}
+}
+
+function openReportInChat(num) {
+  const entry = DATA.tracker.find(r => (r.num||0) == num);
+  if (!entry) return;
+  openChat();
+  sendToChat(`Tell me about my application to ${entry.company} for ${entry.role}. What should I know for interview prep?`);
+}
+
+/* ---------- Voice ---------- */
+let audioInputCtx = null;
+let audioProcessor = null;
+
+function startVoice() {
+  if (isRecording) return;
+  muteAudio = false; // Allow audio for voice-initiated messages
+  const btn = document.getElementById('mic-btn');
+  btn.classList.add('recording');
+  setVoiceActive(true);
+
+  navigator.mediaDevices.getUserMedia({
+    audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+  }).then(stream => {
+    audioStream = stream;
+    audioInputCtx = new AudioContext({ sampleRate: 16000 });
+    const source = audioInputCtx.createMediaStreamSource(stream);
+    audioProcessor = audioInputCtx.createScriptProcessor(4096, 1, 1);
+
+    audioProcessor.onaudioprocess = (e) => {
+      if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const float32 = e.inputBuffer.getChannelData(0);
+
+      // Convert Float32 to Int16
+      const int16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        int16[i] = Math.max(-32768, Math.min(32767, Math.round(float32[i] * 32768)));
+      }
+
+      // Convert to base64
+      const bytes = new Uint8Array(int16.buffer);
+      let b64 = '';
+      for (let i = 0; i < bytes.length; i += 1024) {
+        b64 += String.fromCharCode(...bytes.slice(i, i + 1024));
+      }
+      b64 = btoa(b64);
+
+      // Send as Gemini-format audio
+      ws.send(JSON.stringify({
+        type: 'audio',
+        data: b64,
+        mimeType: 'audio/pcm;rate=16000'
+      }));
+    };
+
+    source.connect(audioProcessor);
+    audioProcessor.connect(audioInputCtx.destination);
+    isRecording = true;
+  }).catch(e => {
+    console.error('Mic error:', e);
+    btn.classList.remove('recording');
+    setVoiceActive(false);
+  });
+}
+
+function stopVoice() {
+  const btn = document.getElementById('mic-btn');
+  btn.classList.remove('recording');
+  setVoiceActive(false);
+  isRecording = false;
+
+  if (audioProcessor) {
+    audioProcessor.disconnect();
+    audioProcessor = null;
+  }
+  if (audioInputCtx) {
+    audioInputCtx.close();
+    audioInputCtx = null;
+  }
+  if (audioStream) {
+    audioStream.getTracks().forEach(t => t.stop());
+    audioStream = null;
+  }
+}
+
+function setVoiceActive(active) {
+  document.querySelectorAll('.voice-bar').forEach(b => b.classList.toggle('active', active));
+}
+
+let audioCtx = null;
+let pcmChunks = [];
+let isPlayingAudio = false;
+let nextPlayTime = 0;
+
+function playAudio(base64, mimeType) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+
+  // Decode base64 PCM to Float32
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const int16 = new Int16Array(bytes.buffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+
+  // Schedule for gapless playback using precise timing
+  const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+  buffer.getChannelData(0).set(float32);
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioCtx.destination);
+
+  const now = audioCtx.currentTime;
+  const startTime = Math.max(now, nextPlayTime);
+  source.start(startTime);
+  nextPlayTime = startTime + buffer.duration;
+
+  setVoiceActive(true);
+  source.onended = () => {
+    if (audioCtx.currentTime >= nextPlayTime - 0.05) {
+      setVoiceActive(false);
+    }
+  };
+}
+
+function stopPlayback() {
+  nextPlayTime = 0;
+  setVoiceActive(false);
+}
+
+/* ---------- Toast Notifications ---------- */
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
+
+/* ---------- Evaluate JD ---------- */
+function openEvaluateModal() {
+  const body = `
+    <div style="display:flex;flex-direction:column;gap:12px;font-family:Inter,sans-serif">
+      <label style="font-size:13px;color:var(--txt2)">Job Posting URL:</label>
+      <input type="text" id="eval-url" placeholder="https://..." style="width:100%">
+      <label style="font-size:13px;color:var(--txt2)">Or paste JD text directly:</label>
+      <textarea id="eval-text" style="width:100%;min-height:150px;background:var(--bg2);color:var(--txt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-family:inherit;font-size:13px;resize:vertical" placeholder="Paste job description here..."></textarea>
+      <button class="btn btn-cy" onclick="evaluateJD()" style="align-self:flex-start">Run Evaluation</button>
+    </div>`;
+  openModal('Evaluate Job Description', body);
+}
+
+async function evaluateJD() {
+  const url = document.getElementById('eval-url')?.value?.trim();
+  const text = document.getElementById('eval-text')?.value?.trim();
+  if (!url && !text) { showToast('Provide a URL or JD text', 'error'); return; }
+  openModal('Evaluating...', '<div style="text-align:center;padding:40px"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Evaluating JD with AI...</div>');
+  try {
+    const res = await fetch(API + '/api/evaluate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url: url || undefined, text: text || undefined })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    const scoreColor = data.score >= 4.0 ? 'var(--green)' : data.score >= 3.0 ? 'var(--cy)' : 'var(--orange)';
+    const resultBody = `
+      <div style="font-family:Inter,sans-serif">
+        <div style="display:flex;gap:20px;margin-bottom:16px;align-items:center">
+          <div style="font-size:48px;font-weight:700;font-family:'Fira Code',monospace;color:${scoreColor}">${data.score}/5</div>
+          <div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">Archetype: <span style="color:var(--cy)">${esc(data.archetype || 'N/A')}</span></div>
+            <div style="font-size:13px;color:var(--txt2)">${esc(data.summary || '')}</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:16px;font-family:'Fira Code',monospace;font-size:12px;white-space:pre-wrap;color:var(--txt2)">${esc(data.report || '')}</div>
+      </div>`;
+    openModal('Evaluation Result -- ' + (data.score || '?') + '/5', resultBody);
+    showToast('Evaluation complete: ' + data.score + '/5', 'success');
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Evaluation failed: ' + esc(e.message) + '</div>');
+  }
+}
+
+/* ---------- Run Scan ---------- */
+async function runScan() {
+  const btn = document.getElementById('scan-btn');
+  btn.innerHTML = '<span class="spinner"></span> Scanning...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API + '/api/scan', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    showToast('Scan complete: found ' + data.found + ' jobs, added ' + data.added + ' new entries', 'success');
+    if (data.added > 0) {
+      // Reload pipeline
+      const pRes = await fetch(API + '/api/pipeline');
+      if (pRes.ok) { const pData = await pRes.json(); DATA.pipeline = pData.entries || []; renderPipeline(); renderStats(); }
+    }
+  } catch (e) { showToast('Scan failed: ' + e.message, 'error'); }
+  btn.textContent = 'Run Scan';
+  btn.disabled = false;
+}
+
+/* ---------- Research Company ---------- */
+let researchCache = {};
+async function researchCompany(companyName) {
+  const input = document.getElementById('research-input');
+  if (companyName) {
+    input.value = companyName;
+    switchTab('research');
+  }
+  const company = input.value.trim();
+  if (!company) { showToast('Enter a company name', 'error'); return; }
+
+  // Check cache
+  if (researchCache[company.toLowerCase()]) {
+    renderResearchResults(researchCache[company.toLowerCase()]);
+    return;
+  }
+
+  const btn = document.getElementById('research-btn');
+  btn.innerHTML = '<span class="spinner"></span> Researching...';
+  btn.disabled = true;
+  document.getElementById('research-results').innerHTML = '<div class="glass" style="padding:40px;text-align:center"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Researching ' + esc(company) + '...</div>';
+  try {
+    const res = await fetch(API + '/api/research', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ company })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    researchCache[company.toLowerCase()] = data;
+    renderResearchResults(data);
+    updateResearchCacheUI();
+    showToast('Research complete for ' + company, 'success');
+  } catch (e) {
+    document.getElementById('research-results').innerHTML = '<div class="error-msg">Research failed: ' + esc(e.message) + '</div>';
+  }
+  btn.textContent = 'Research';
+  btn.disabled = false;
+}
+
+function renderResearchResults(data) {
+  const sections = [
+    { key: 'summary', label: 'Company Overview', icon: '' },
+    { key: 'aiStrategy', label: 'AI Strategy', icon: '' },
+    { key: 'culture', label: 'Culture & Values', icon: '' },
+    { key: 'recentNews', label: 'Recent News', icon: '' },
+    { key: 'glassdoor', label: 'Glassdoor Sentiment', icon: '' },
+    { key: 'angle', label: 'Your Angle', icon: '' },
+  ];
+  const html = '<h3 style="font-size:18px;font-weight:600;margin-bottom:16px" class="grad-text">' + esc(data.company || '') + '</h3>' +
+    sections.filter(s => data[s.key]).map(s =>
+      `<div class="glass research-card"><h4>${s.label}</h4><p>${esc(data[s.key])}</p></div>`
+    ).join('');
+  document.getElementById('research-results').innerHTML = html;
+}
+
+function updateResearchCacheUI() {
+  const keys = Object.keys(researchCache);
+  if (keys.length === 0) return;
+  const container = document.getElementById('research-cache');
+  container.style.display = 'block';
+  document.getElementById('research-cache-list').innerHTML = keys.map(k =>
+    `<button class="btn btn-sm btn-ghost" onclick="researchCompany('${esc(researchCache[k].company || k)}')">${esc(researchCache[k].company || k)}</button>`
+  ).join('');
+}
+
+/* ---------- Export Package ---------- */
+async function exportPackage(roleId) {
+  openModal('Generating Application Package...', '<div style="text-align:center;padding:40px"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Generating resume, cover letter & form answers...</div>');
+  try {
+    const res = await fetch(API + '/api/export-package', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ roleId })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    const body = `
+      <div style="font-family:Inter,sans-serif">
+        <h4 style="font-size:14px;margin-bottom:8px;color:var(--cy)">Resume</h4>
+        <div style="background:var(--bg2);padding:12px;border-radius:var(--radius-sm);margin-bottom:16px;font-family:'Fira Code',monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(data.resume || 'N/A')}</div>
+        <button class="btn btn-sm btn-ghost" style="margin-bottom:12px" onclick="navigator.clipboard.writeText(${JSON.stringify(data.resume||'')});showToast('Resume copied','success')">Copy Resume</button>
+        <h4 style="font-size:14px;margin-bottom:8px;color:var(--cy)">Cover Letter</h4>
+        <div style="background:var(--bg2);padding:12px;border-radius:var(--radius-sm);margin-bottom:16px;font-family:'Fira Code',monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(data.coverLetter || 'N/A')}</div>
+        <button class="btn btn-sm btn-ghost" style="margin-bottom:12px" onclick="navigator.clipboard.writeText(${JSON.stringify(data.coverLetter||'')});showToast('Cover letter copied','success')">Copy Cover Letter</button>
+        <h4 style="font-size:14px;margin-bottom:8px;color:var(--cy)">Form Answers</h4>
+        <div style="background:var(--bg2);padding:12px;border-radius:var(--radius-sm);font-family:'Fira Code',monospace;font-size:12px;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(data.answers || 'N/A')}</div>
+        <button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(${JSON.stringify(data.answers||'')});showToast('Answers copied','success')">Copy Answers</button>
+      </div>`;
+    openModal('Application Package', body);
+    showToast('Application package generated', 'success');
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Export failed: ' + esc(e.message) + '</div>');
+  }
+}
+
+/* ---------- Smart Recommendations ---------- */
+async function getRecommendations() {
+  const container = document.getElementById('recommendations-content');
+  container.innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner"></span> Loading recommendations...</div>';
+  try {
+    const res = await fetch(API + '/api/recommendations');
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+    let html = '';
+    if (data.weeklyGoals) {
+      html += '<div class="glass" style="padding:14px 18px;margin-bottom:14px;border-left:3px solid var(--cy)"><p style="font-size:13px;color:var(--txt2)">' + esc(data.weeklyGoals) + '</p></div>';
+    }
+    if (data.priorities && data.priorities.length) {
+      html += data.priorities.map(p =>
+        `<div class="glass rec-card"><div class="rec-urgency urgency-${p.urgency}"></div><div class="rec-info"><h4>${esc(p.company)} -- ${esc(p.title)}</h4><p>${esc(p.reason)}</p></div></div>`
+      ).join('');
+    } else {
+      html += '<p style="color:var(--txt3);font-size:13px">No specific priorities right now. Keep evaluating pipeline entries!</p>';
+    }
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div class="error-msg">Failed to load recommendations: ' + esc(e.message) + '</div>';
+  }
+}
+
+/* ---------- Add Story ---------- */
+async function addStory() {
+  await _submitStory('story-situation', 'story-task', 'story-action', 'story-result', 'story-reflection', 'story-tags');
+}
+
+async function addStoryFromPrep() {
+  await _submitStory('ip-story-situation', 'ip-story-task', 'ip-story-action', 'ip-story-result', 'ip-story-reflection', 'ip-story-tags');
+}
+
+async function _submitStory(sitId, taskId, actId, resId, refId, tagId) {
+  const situation = document.getElementById(sitId).value.trim();
+  const task = document.getElementById(taskId).value.trim();
+  const action = document.getElementById(actId).value.trim();
+  const result = document.getElementById(resId).value.trim();
+  const reflection = document.getElementById(refId).value.trim();
+  const tags = document.getElementById(tagId).value.trim();
+  if (!situation || !task || !action || !result) { showToast('Fill in Situation, Task, Action, and Result', 'error'); return; }
+  try {
+    const res = await fetch(API + '/api/stories', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ situation, task, action, result, reflection, tags })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    showToast('Story added to story bank', 'success');
+    [sitId, taskId, actId, resId, refId, tagId].forEach(id => { document.getElementById(id).value = ''; });
+  } catch (e) { showToast('Failed to add story: ' + e.message, 'error'); }
+}
+
+/* ---------- File Editors ---------- */
+async function loadFileEditor(name) {
+  const textarea = document.getElementById('editor-' + name);
+  if (!textarea) return;
+  try {
+    const res = await fetch(API + '/api/file/' + name);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    textarea.value = data.content || '';
+  } catch (e) { textarea.value = '// Failed to load: ' + e.message; }
+}
+
+async function saveFile(name) {
+  const textarea = document.getElementById('editor-' + name);
+  if (!textarea) return;
+  try {
+    const res = await fetch(API + '/api/file/' + name, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ content: textarea.value })
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    showToast(name + ' saved successfully', 'success');
+  } catch (e) { showToast('Failed to save ' + name + ': ' + e.message, 'error'); }
+}
+
+/* ---------- Inbox ---------- */
+function renderInbox() {
+  const data = DATA.inbox;
+  const container = document.getElementById('inbox-list');
+  if (!data || !data.messages || !data.messages.length) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--txt3)">No inbox messages. Connect Gmail MCP for live data.</div>';
+    return;
+  }
+  container.innerHTML = data.messages.map(m => {
+    const catClass = 'cat-' + (m.category || 'other').toLowerCase();
+    return `<div class="inbox-item ${m.read ? '' : 'unread'}">
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span class="inbox-from">${esc(m.from)}</span>
+          <span class="inbox-date">${esc(m.date)}</span>
+        </div>
+        <div class="inbox-subject">${esc(m.subject)} <span class="inbox-category ${catClass}">${esc(m.category || 'Other')}</span></div>
+        <div class="inbox-snippet">${esc(m.snippet)}</div>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();openChat();sendToChat('Draft a reply to this email from ${esc(m.from)} about: ${esc(m.subject)}')">Draft Reply</button>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- Calendar ---------- */
+let calYear, calMonth;
+(function initCalVars() { const now = new Date(); calYear = now.getFullYear(); calMonth = now.getMonth(); })();
+
+function changeCalMonth(delta) {
+  calMonth += delta;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('calendar-grid');
+  const title = document.getElementById('cal-month-title');
+  if (!grid) return;
+
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  title.textContent = months[calMonth] + ' ' + calYear;
+
+  const today = new Date();
+  const firstDay = new Date(calYear, calMonth, 1);
+  const lastDay = new Date(calYear, calMonth + 1, 0);
+  const startDow = firstDay.getDay(); // 0=Sun
+  const daysInMonth = lastDay.getDate();
+  const prevMonthLast = new Date(calYear, calMonth, 0).getDate();
+
+  // Events from API
+  const events = (DATA.calendar && DATA.calendar.events) || [];
+  const eventsByDate = {};
+  events.forEach(e => { if (!eventsByDate[e.date]) eventsByDate[e.date] = []; eventsByDate[e.date].push(e); });
+
+  let html = '';
+  // Day headers
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+    html += '<div class="calendar-header">' + d + '</div>';
+  });
+
+  // Previous month fill
+  for (let i = startDow - 1; i >= 0; i--) {
+    html += '<div class="calendar-day other-month"><div class="day-num">' + (prevMonthLast - i) + '</div></div>';
+  }
+
+  // Current month days
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = calYear + '-' + String(calMonth + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const isToday = today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === d;
+    const dayEvents = eventsByDate[dateStr] || [];
+    const evtHtml = dayEvents.map(e => {
+      const typeClass = 'evt-' + (e.type || 'prep').toLowerCase().replace(/\s+/g,'');
+      return '<div class="calendar-event ' + typeClass + '" title="' + esc(e.title) + '">' + esc(e.title).substring(0, 15) + '</div>';
+    }).join('');
+    html += '<div class="calendar-day' + (isToday ? ' today' : '') + '"><div class="day-num">' + d + '</div>' + evtHtml + '</div>';
+  }
+
+  // Next month fill (fill remaining cells to complete the grid row)
+  const totalCells = startDow + daysInMonth;
+  const remainder = totalCells % 7;
+  if (remainder > 0) {
+    for (let i = 1; i <= 7 - remainder; i++) {
+      html += '<div class="calendar-day other-month"><div class="day-num">' + i + '</div></div>';
+    }
+  }
+
+  grid.innerHTML = html;
+
+  // Upcoming events list
+  const upcoming = events.filter(e => e.date >= today.toISOString().substring(0,10)).sort((a,b) => a.date.localeCompare(b.date));
+  const upEl = document.getElementById('upcoming-events');
+  if (upcoming.length) {
+    upEl.innerHTML = upcoming.map(e => {
+      const typeClass = 'evt-' + (e.type || 'prep').toLowerCase().replace(/\s+/g,'');
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div><span class="calendar-event ${typeClass}" style="display:inline-block">${esc(e.type)}</span> <span style="font-size:13px;margin-left:8px">${esc(e.title)}</span></div>
+        <span class="mono" style="font-size:11px;color:var(--txt3)">${esc(e.date)} ${esc(e.time || '')}</span>
+      </div>`;
+    }).join('');
+  } else {
+    upEl.innerHTML = '<p style="color:var(--txt3);font-size:13px">No upcoming events</p>';
+  }
+}
+
+/* ---------- Tab Badges ---------- */
+function updateTabBadges() {
+  // Pipeline badge: count of unchecked
+  const pipeline = DATA.pipeline || [];
+  const unchecked = pipeline.filter(p => p.verified === undefined || p.verified === null).length;
+  setBadge('pipeline', unchecked);
+
+  // Tracker badge: pending follow-ups (responded/interview status)
+  const tracker = DATA.tracker || [];
+  const pendingFollowups = tracker.filter(r => { const s = (r.status||'').toLowerCase(); return s === 'responded' || s === 'interview'; }).length;
+  setBadge('tracker', pendingFollowups);
+
+  // Inbox badge: unread
+  const inbox = DATA.inbox;
+  const unread = inbox && inbox.messages ? inbox.messages.filter(m => !m.read).length : 0;
+  const inboxBadge = document.getElementById('badge-inbox');
+  if (inboxBadge) {
+    if (unread > 0) { inboxBadge.textContent = unread; inboxBadge.classList.remove('hidden'); }
+    else { inboxBadge.classList.add('hidden'); }
+  }
+}
+
+function setBadge(tabName, count) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (!btn) return;
+  let badge = btn.querySelector('.tab-badge');
+  if (count > 0) {
+    if (!badge) { badge = document.createElement('span'); badge.className = 'tab-badge'; btn.appendChild(badge); }
+    badge.textContent = count;
+    badge.classList.remove('hidden');
+  } else if (badge) {
+    badge.classList.add('hidden');
+  }
+}
+
+/* ---------- Keyboard Shortcuts ---------- */
+document.addEventListener('keydown', (e) => {
+  // Don't trigger when typing in an input/textarea
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+  // Number keys 1-9,0 switch tabs
+  const tabKeys = { '1':'pipeline','2':'tracker','3':'interview','4':'crm','5':'comp','6':'brand','7':'analytics','8':'connectors','9':'inbox','0':'calendar' };
+  if (tabKeys[e.key]) { e.preventDefault(); switchTab(tabKeys[e.key]); return; }
+
+  // Ctrl+K -> focus pipeline search
+  if (e.ctrlKey && e.key === 'k') { e.preventDefault(); switchTab('pipeline'); document.getElementById('pipe-search').focus(); return; }
+
+  // Ctrl+J -> focus chat input
+  if (e.ctrlKey && e.key === 'j') { e.preventDefault(); openChat(); document.getElementById('chat-input').focus(); return; }
+
+  // Escape -> close modal
+  if (e.key === 'Escape') { closeModal(); return; }
+});
+
+/* ---------- Helpers ---------- */
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str || '');
+  return d.innerHTML;
+}
+
+function showError(msg) {
+  const el = document.createElement('div');
+  el.className = 'error-msg';
+  el.textContent = msg;
+  document.getElementById('panels').prepend(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+/* ---------- Audio Toggle ---------- */
+function toggleAudioMode() {
+  audioAlwaysMuted = !audioAlwaysMuted;
+  document.getElementById('audio-toggle').classList.toggle('muted', audioAlwaysMuted);
+  document.getElementById('audio-toggle').title = audioAlwaysMuted ? 'Voice off' : 'Voice on';
+}
+
+/* ---------- Conversation Persistence ---------- */
+async function saveConversation() {
+  try {
+    await fetch('/api/conversation/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: conversationMessages.slice(-10) })
+    });
+  } catch {}
+}
+
+async function extractMemories() {
+  if (conversationMessages.length < 4) return;
+  try {
+    const recent = conversationMessages.slice(-20);
+    const res = await fetch('/api/memory/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: recent })
+    });
+    const data = await res.json();
+    if (data.extracted?.actions?.length) {
+      appendMessage('system', 'Memory updated: ' + (data.extracted.facts?.length || 0) + ' facts, ' + (data.extracted.actions?.length || 0) + ' action items saved.');
+    }
+  } catch {}
+}
+
+function restoreConversation() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
+    const container = document.getElementById('chat-messages');
+    // Only restore last 20 messages
+    const recent = stored.slice(-20);
+    recent.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + msg.role;
+      div.textContent = msg.text;
+      container.appendChild(div);
+    });
+    if (recent.length) {
+      container.scrollTop = container.scrollHeight;
+      conversationMessages = recent;
+    }
+  } catch {}
+}
+
+/* ---------- Init ---------- */
+loadData();
+restoreConversation();
+initChat();
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "name": "career-os",
+  "version": "1.0.0",
+  "description": "AI-powered career advancement operating system built on Claude Code",
+  "scripts": {
+    "setup": "node setup.mjs",
+    "start": "node dashboard-server.mjs",
+    "dashboard": "node dashboard-web.mjs",
+    "verify": "node verify-pipeline.mjs",
+    "normalize": "node normalize-statuses.mjs",
+    "dedup": "node dedup-tracker.mjs",
+    "merge": "node merge-tracker.mjs",
+    "pdf": "node generate-pdf.mjs",
+    "sync-check": "node cv-sync-check.mjs",
+    "test": "node --test __tests__/*.test.mjs"
+  },
+  "keywords": [
+    "ai",
+    "job-search",
+    "claude-code",
+    "career",
+    "automation",
+    "career-os"
+  ],
+  "author": "Stephen C. Webster <stephen@futurespeak.ai> (https://futurespeak.ai)",
+  "contributors": [
+    "Santiago Fernandez de Valderrama <hi@santifer.io> (https://santifer.io)"
+  ],
+  "homepage": "https://github.com/FutureSpeakAI/career-os",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FutureSpeakAI/career-os"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "playwright": "^1.58.1",
+    "ws": "^8.20.0"
+  }
+}

@@ -1,0 +1,62 @@
+# API keys (NEVER commit)
+.env
+
+# Personal data (user fills these)
+cv.md
+article-digest.md
+data/applications.md
+data/pipeline.md
+data/scan-history.tsv
+reports/*.md
+!reports/.gitkeep
+output/*
+!output/.gitkeep
+batch/logs/*
+!batch/logs/.gitkeep
+batch/batch-state.tsv
+batch/batch-input.tsv
+batch/tracker-additions/*.tsv
+!batch/tracker-additions/.gitkeep
+jds/*
+!jds/.gitkeep
+SUBMIT-NOW.md
+
+# User config
+config/profile.yml
+portals.yml
+
+# Interview prep (personal)
+interview-prep/story-bank.md
+interview-prep/prep-*.md
+!interview-prep/prep-ahead.md
+!interview-prep/company-prep-template.md
+
+# Generated
+.resolved-prompt-*
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+*.mov
+*.mp4
+
+# Claude Code local
+.claude/settings.local.json
+.claude/memory/
+
+# Dashboard binaries
+career-dashboard
+dashboard/career-dashboard
+dashboard/career-dashboard.exe
+
+# Web dashboard (generated)
+output/dashboard.html
+
+# Agent memory & conversations (personal)
+data/agent-memory.json
+data/conversations/
+
+# Asimov's Mind local state
+.asimovs-mind/
