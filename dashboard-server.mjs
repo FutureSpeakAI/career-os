@@ -1923,6 +1923,7 @@ wss.on('connection', (clientWs) => {
   if (!geminiKey) {
     log('WARN', 'WebSocket connection attempted but GEMINI_API_KEY not set');
     clientWs.send(JSON.stringify({
+      type: 'error',
       error: 'GEMINI_API_KEY not configured. Add it to your .env file.',
     }));
     clientWs.close(1008, 'API key not configured');
@@ -1942,7 +1943,7 @@ wss.on('connection', (clientWs) => {
     geminiWs = new WebSocket(geminiUrl);
   } catch (err) {
     log('ERROR', `Failed to create Gemini WebSocket: ${err.message}`);
-    clientWs.send(JSON.stringify({ error: 'Failed to connect to Gemini API' }));
+    clientWs.send(JSON.stringify({ type: 'error', error: 'Failed to connect to Gemini API' }));
     clientWs.close(1011, 'Upstream connection failed');
     return;
   }
@@ -1997,6 +1998,13 @@ wss.on('connection', (clientWs) => {
             }
           }
         }
+        // Forward transcriptions (native audio models provide these)
+        if (msg.serverContent?.outputTranscription?.text) {
+          clientWs.send(JSON.stringify({ type: 'transcript', text: msg.serverContent.outputTranscription.text }));
+        }
+        if (msg.serverContent?.inputTranscription?.text) {
+          clientWs.send(JSON.stringify({ type: 'inputTranscript', text: msg.serverContent.inputTranscription.text }));
+        }
         // Forward turnComplete signal
         if (msg.serverContent?.turnComplete) {
           clientWs.send(JSON.stringify({ type: 'turnComplete' }));
@@ -2021,9 +2029,11 @@ wss.on('connection', (clientWs) => {
 
   geminiWs.on('close', (code, reason) => {
     geminiClosed = true;
-    log('INFO', `Gemini WebSocket closed: ${code} ${reason}`);
+    clearInterval(keepAlive);
+    const reasonStr = reason ? reason.toString() : '';
+    log('INFO', `Gemini WebSocket closed: ${code} ${reasonStr}`);
     if (!clientClosed && clientWs.readyState === WebSocket.OPEN) {
-      clientWs.close(code, reason.toString());
+      clientWs.close(code, reasonStr);
     }
   });
 
@@ -2048,8 +2058,7 @@ wss.on('connection', (clientWs) => {
         const msg = JSON.parse(raw);
 
         if (msg.type === 'text' && msg.content) {
-          // Use clientContent for text (creates proper turn-based flow with turnComplete)
-          // realtimeInput.text does NOT create turns -- audio streams indefinitely
+          // Use clientContent for text input (proper turn-based conversation)
           const geminiMsg = {
             clientContent: {
               turns: [{ role: 'user', parts: [{ text: msg.content }] }],

@@ -163,7 +163,7 @@ input:focus,select:focus{border-color:var(--cy)}
 .chat-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .chat-header h3{font-size:15px;font-weight:600}
 .chat-status-dot{width:10px;height:10px;border-radius:50%;background:#555;display:inline-block;transition:background .3s}
-.chat-status-dot.connected{background:var(--gr);box-shadow:0 0 8px rgba(34,197,94,.5);animation:pulse 2s infinite}
+.chat-status-dot.connected{background:var(--green);box-shadow:0 0 8px rgba(34,197,94,.5);animation:pulse 2s infinite}
 .chat-close{font-size:20px;color:var(--txt3);cursor:pointer;padding:4px}
 .chat-close:hover{color:var(--txt)}
 /* Voice visualizer */
@@ -190,7 +190,7 @@ input:focus,select:focus{border-color:var(--cy)}
 .chat-mic:hover,.chat-mic.recording{background:rgba(138,43,226,.3);box-shadow:0 0 12px rgba(138,43,226,.3)}
 .audio-toggle{background:none;border:1px solid var(--border);border-radius:6px;color:var(--cy);cursor:pointer;padding:4px 8px;font-size:14px;transition:.2s}
 .audio-toggle:hover{border-color:var(--cy)}
-.audio-toggle.muted{color:var(--t3);opacity:.5}
+.audio-toggle.muted{color:var(--txt3);opacity:.5}
 /* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:2000;display:none;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -245,8 +245,8 @@ input:focus,select:focus{border-color:var(--cy)}
 .calendar-day.other-month{opacity:.3}
 .calendar-event{font-size:9px;padding:2px 5px;border-radius:10px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .calendar-event.evt-interview{background:rgba(245,158,11,.2);color:var(--orange)}
-.calendar-event.evt-prep{background:rgba(0,240,255,.15);color:var(--cy)}
-.calendar-event.evt-followup{background:rgba(138,43,226,.2);color:#b57edc}
+.calendar-event.evt-prep,.calendar-event.evt-prepblock{background:rgba(0,240,255,.15);color:var(--cy)}
+.calendar-event.evt-followup,.calendar-event.evt-follow-up{background:rgba(138,43,226,.2);color:#b57edc}
 .calendar-event.evt-deadline{background:rgba(239,68,68,.2);color:var(--red)}
 /* Tab badges */
 .tab-btn{position:relative}
@@ -808,7 +808,7 @@ async function loadData() {
     ['profile','/api/profile'],['pipeline','/api/pipeline'],['tracker','/api/tracker'],
     ['contacts','/api/contacts'],['reports','/api/reports'],['analytics','/api/analytics'],
     ['brand','/api/brand'],['comp','/api/comp'],['connectors','/api/connectors'],
-    ['stories','/api/stories'],['followups','/api/followups'],['outreach','/api/outreach'],
+    ['stories','/api/story-bank'],['followups','/api/follow-ups'],
     ['inbox','/api/inbox'],['calendar','/api/calendar']
   ];
   const results = await Promise.allSettled(
@@ -826,9 +826,11 @@ async function loadData() {
   // Normalize API responses: unwrap { count, entries/rows } into plain arrays
   if (DATA.pipeline?.entries) DATA.pipeline = DATA.pipeline.entries;
   if (DATA.tracker?.rows) DATA.tracker = DATA.tracker.rows;
-  if (DATA.contacts?.rows) DATA.contacts = DATA.contacts.rows;
-  if (DATA.followups?.rows) DATA.followups = DATA.followups.rows;
-  if (DATA.storyBank?.rows) DATA.storyBank = DATA.storyBank.rows;
+  if (DATA.contacts?.contacts) DATA.contacts = DATA.contacts.contacts;
+  else if (DATA.contacts?.rows) DATA.contacts = DATA.contacts.rows;
+  if (DATA.followups?.followUps) DATA.followups = DATA.followups.followUps;
+  else if (DATA.followups?.rows) DATA.followups = DATA.followups.rows;
+  if (DATA.reports?.files) DATA.reports = DATA.reports.files;
   if (!Array.isArray(DATA.pipeline)) DATA.pipeline = [];
   if (!Array.isArray(DATA.tracker)) DATA.tracker = [];
   if (!Array.isArray(DATA.contacts)) DATA.contacts = [];
@@ -879,8 +881,8 @@ function renderStats() {
   const p = DATA.pipeline || [];
   const c = DATA.contacts || [];
   const statusCount = (s) => t.filter(r => r.status && r.status.toLowerCase() === s).length;
-  const csuite = p.filter(r => classifyTier(r.role || r.title || '') === 'c-suite').length;
-  const director = p.filter(r => classifyTier(r.role || r.title || '') === 'director').length;
+  const csuite = p.filter(r => classifyTier(r.role || r.title || r.Role || r.Title || '') === 'c-suite').length;
+  const director = p.filter(r => classifyTier(r.role || r.title || r.Role || r.Title || '') === 'director').length;
   document.getElementById('s-pipeline').textContent = p.length;
   document.getElementById('s-vp').textContent = csuite;
   document.getElementById('s-director').textContent = director;
@@ -907,14 +909,15 @@ function renderPipeline() {
   const rows = DATA.pipeline || [];
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--txt3);text-align:center;padding:40px">No pipeline entries. Run <code>/career-os scan</code> to populate.</td></tr>'; return; }
   tbody.innerHTML = rows.map((r, i) => {
-    const role = r.role || r.title || 'Unknown';
-    const tier = classifyTier(role);
+    const role = r.role || r.title || r.Role || r.Title || 'Unknown';
+    const company = r.company || r.Company || '--';
+    const tier = r.tier || classifyTier(role);
     const pillClass = tier === 'c-suite' ? 'pill-csuite' : tier === 'director' ? 'pill-director' : 'pill-other';
     const statusBadge = r.verified === true ? '<span class="badge badge-active">Active</span>' : r.verified === false ? '<span class="badge badge-closed">Closed</span>' : '<span class="badge badge-unchecked">Unchecked</span>';
-    const url = r.url || r.link || '#';
-    return `<tr data-idx="${i}" data-tier="${tier}" data-company="${esc(r.company||'')}" data-role="${esc(role)}">
+    const url = r.url || r.link || r.URL || r.Link || '#';
+    return `<tr data-idx="${i}" data-tier="${tier}" data-company="${esc(company)}" data-role="${esc(role)}">
       <td class="mono">${r.num || i+1}</td>
-      <td><a href="#" onclick="event.preventDefault();researchCompany('${esc(r.company||'')}')" style="color:var(--txt);text-decoration:none;border-bottom:1px dashed var(--border)" title="Research ${esc(r.company||'')}">${esc(r.company || '--')}</a></td>
+      <td><a href="#" onclick="event.preventDefault();researchCompany('${esc(company)}')" style="color:var(--txt);text-decoration:none;border-bottom:1px dashed var(--border)" title="Research ${esc(company)}">${esc(company)}</a></td>
       <td>${esc(role)}</td>
       <td><span class="pill ${pillClass}">${tier}</span></td>
       <td>${statusBadge}</td>
@@ -1056,12 +1059,25 @@ function renderTrackerFunnel() {
 
 /* ---------- Interview Prep ---------- */
 function renderInterviewPrep() {
-  const stories = DATA.stories || [];
+  const raw = DATA.stories;
+  let stories = [];
+  // stories can be { configured, sections } from /api/story-bank or already an array
+  if (raw && raw.sections && Array.isArray(raw.sections)) {
+    stories = raw.sections.filter(s => s.level === 2);
+  } else if (Array.isArray(raw)) {
+    stories = raw;
+  }
   if (stories.length) {
     const tbody = document.getElementById('story-body');
-    tbody.innerHTML = stories.map(s =>
-      `<tr><td>${esc(s.title||'')}</td><td style="color:var(--txt2);font-size:12px">${esc(s.situation||'')}</td><td><span class="pill pill-director">${esc(s.competency||'')}</span></td></tr>`
-    ).join('');
+    tbody.innerHTML = stories.map(s => {
+      const title = s.title || '';
+      const body = s.body || s.situation || '';
+      const competency = s.competency || '';
+      // Try to extract competency from tags in body
+      const tagMatch = body.match(/\*\*Tags?:\*\*\s*(.+)/i);
+      const tags = tagMatch ? tagMatch[1].trim() : competency;
+      return `<tr><td>${esc(title)}</td><td style="color:var(--txt2);font-size:12px">${esc(body.substring(0,120))}</td><td><span class="pill pill-director">${esc(tags)}</span></td></tr>`;
+    }).join('');
   }
 }
 
@@ -1087,51 +1103,73 @@ function startNegotiationRoleplay() {
 }
 
 /* ---------- CRM ---------- */
+function crmField(c, ...keys) {
+  for (const k of keys) { if (c[k]) return c[k]; }
+  return '';
+}
 function renderCRM() {
   const tbody = document.getElementById('contacts-body');
   const contacts = DATA.contacts || [];
   if (!contacts.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--txt3);text-align:center;padding:30px">No contacts yet. Use <code>/career-os outreach</code> to add.</td></tr>'; return; }
-  tbody.innerHTML = contacts.map((c, i) =>
-    `<tr>
-      <td><a href="#" onclick="event.preventDefault();openChat();sendToChat('Draft outreach to ${esc(c.name||'')} at ${esc(c.company||'')}')" style="color:var(--cy);cursor:pointer">${esc(c.name||'')}</a></td><td>${esc(c.company||'')}</td><td>${esc(c.role||'')}</td>
-      <td>${esc(c.how_met||'')}</td><td class="mono" style="font-size:12px">${esc(c.last_contact||'')}</td>
-      <td>${esc(c.status||'')}</td>
-      <td><button class="btn btn-sm btn-cy" onclick="generateContent('email-draft','','outreach to ${esc(c.name||'')} at ${esc(c.company||'')}')">Draft Outreach</button></td>
-    </tr>`
-  ).join('');
+  tbody.innerHTML = contacts.map((c, i) => {
+    const name = crmField(c, 'name', 'Name');
+    const company = crmField(c, 'company', 'Company');
+    const role = crmField(c, 'role', 'Role');
+    const howMet = crmField(c, 'how_met', 'How Met', 'How_Met', 'howMet');
+    const lastContact = crmField(c, 'last_contact', 'Last Contact', 'Last_Contact', 'lastContact');
+    const status = crmField(c, 'status', 'Status');
+    return `<tr>
+      <td><a href="#" onclick="event.preventDefault();openChat();sendToChat('Draft outreach to ${esc(name)} at ${esc(company)}')" style="color:var(--cy);cursor:pointer">${esc(name)}</a></td><td>${esc(company)}</td><td>${esc(role)}</td>
+      <td>${esc(howMet)}</td><td class="mono" style="font-size:12px">${esc(lastContact)}</td>
+      <td>${esc(status)}</td>
+      <td><button class="btn btn-sm btn-cy" onclick="generateContent('email-draft','','outreach to ${esc(name)} at ${esc(company)}')">Draft Outreach</button></td>
+    </tr>`;
+  }).join('');
   const followups = DATA.followups || [];
-  if (followups.length) {
-    document.getElementById('followup-queue').innerHTML = followups.map(f =>
-      `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt2)">${esc(f.name||'')} - ${esc(f.action||'')} <span class="mono" style="font-size:11px;color:var(--txt3)">${esc(f.due||'')}</span></div>`
-    ).join('');
-  }
-  const templates = DATA.outreach || [];
-  if (templates.length) {
-    document.getElementById('outreach-templates').innerHTML = '<div class="cards-grid">' + templates.map(t =>
-      `<div class="glass card"><h4>${esc(t.name||t.title||'')}</h4><p>${esc(t.preview||t.content||'').slice(0,120)}...</p></div>`
-    ).join('') + '</div>';
+  if (Array.isArray(followups) && followups.length) {
+    document.getElementById('followup-queue').innerHTML = followups.map(f => {
+      const name = crmField(f, 'name', 'Name', 'Contact');
+      const action = crmField(f, 'action', 'Action', 'Task');
+      const due = crmField(f, 'due', 'Due', 'Due Date', 'Date');
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt2)">${esc(name)} - ${esc(action)} <span class="mono" style="font-size:11px;color:var(--txt3)">${esc(due)}</span></div>`;
+    }).join('');
   }
 }
 
 /* ---------- Comp Lab ---------- */
 function renderComp() {
-  const comp = DATA.comp || DATA.profile?.compensation;
-  if (!comp) return;
-  if (comp.current) document.getElementById('comp-current').textContent = comp.current;
-  if (comp.target || comp.target_range) document.getElementById('comp-target').textContent = comp.target || comp.target_range;
-  if (comp.walkaway || comp.minimum) document.getElementById('comp-walkaway').textContent = comp.walkaway || comp.minimum;
+  const comp = DATA.comp;
+  const profileComp = DATA.profile?.compensation || {};
+  if (!comp && !profileComp.target_range) return;
+  // comp from /api/comp has: { marketData, negotiation, roleComp, profile: { target_range, minimum, currency } }
+  const p = comp?.profile || profileComp;
+  if (p.target_range) document.getElementById('comp-target').textContent = p.target_range;
+  if (p.minimum) document.getElementById('comp-walkaway').textContent = p.minimum;
+  // Negotiation playbook content
+  if (comp?.negotiation?.content) {
+    document.getElementById('negotiation-playbook').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(comp.negotiation.content)}</p>`;
+  }
 }
 
 /* ---------- Brand ---------- */
 function renderBrand() {
   const brand = DATA.brand;
   if (!brand) return;
-  if (brand.positioning) document.getElementById('brand-positioning').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(brand.positioning)}</p>`;
-  if (brand.calendar) document.getElementById('content-calendar').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(brand.calendar)}</p>`;
-  if (brand.articles && brand.articles.length) {
-    document.getElementById('article-digest').innerHTML = brand.articles.map(a =>
-      `<div class="glass card"><h4>${esc(a.title||'')}</h4><p>${esc(a.summary||a.metric||'')}</p></div>`
-    ).join('');
+  // brand.positioning is { content, sections }
+  if (brand.positioning) {
+    const content = typeof brand.positioning === 'string' ? brand.positioning : (brand.positioning.content || '');
+    if (content) document.getElementById('brand-positioning').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(content)}</p>`;
+  }
+  // brand.contentCalendar is { content, table, sections }
+  const cal = brand.contentCalendar || brand.calendar;
+  if (cal) {
+    const content = typeof cal === 'string' ? cal : (cal.content || '');
+    if (content) document.getElementById('content-calendar').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(content)}</p>`;
+  }
+  // brand.engagement is { content, table, sections }
+  if (brand.engagement) {
+    const content = typeof brand.engagement === 'string' ? brand.engagement : (brand.engagement.content || '');
+    if (content) document.getElementById('engagement-metrics').innerHTML = `<p style="color:var(--txt2);font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(content)}</p>`;
   }
 }
 
@@ -1174,7 +1212,7 @@ function renderAnalytics() {
   const reports = DATA.reports || [];
   if (reports.length) {
     document.getElementById('reports-list').innerHTML = reports.map(r =>
-      `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px"><span class="mono" style="color:var(--cy)">${esc(r.num||'')}</span> ${esc(r.company||'')} - ${esc(r.role||'')} <span style="color:var(--txt3);font-size:11px">${esc(r.date||'')}</span></div>`
+      `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px"><span class="mono" style="color:var(--cy)">#${esc(r.num||'')}</span> ${esc(r.slug || r.company || r.file || '')} <span style="color:var(--txt3);font-size:11px">${esc(r.date||'')}</span></div>`
     ).join('');
   }
 }
@@ -1183,13 +1221,25 @@ function renderAnalytics() {
 function renderConnectors() {
   const c = DATA.connectors;
   if (!c) return;
-  if (c.mcp && Array.isArray(c.mcp)) {
-    document.getElementById('mcp-services').innerHTML = c.mcp.map(s =>
-      `<div class="glass connector-card"><div class="connector-dot ${s.connected?'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(s.name)}</h4><p style="font-size:12px;color:var(--txt3)">${esc(s.description||'')}</p></div></div>`
+  // Server returns { apiKeys: {KEY: bool, ...}, mcpServices: [{name, description}, ...] }
+  const mcpList = c.mcpServices || c.mcp || [];
+  if (Array.isArray(mcpList) && mcpList.length) {
+    document.getElementById('mcp-services').innerHTML = mcpList.map(s =>
+      `<div class="glass connector-card"><div class="connector-dot ${s.connected !== false ? 'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(s.name)}</h4><p style="font-size:12px;color:var(--txt3)">${esc(s.description||'')}</p></div></div>`
     ).join('');
   }
-  if (c.apis && Array.isArray(c.apis)) {
-    document.getElementById('api-keys').innerHTML = c.apis.map(s =>
+  const apiKeys = c.apiKeys || c.apis || {};
+  if (apiKeys && typeof apiKeys === 'object' && !Array.isArray(apiKeys)) {
+    // apiKeys is {KEY_NAME: boolean}
+    const keyEntries = Object.entries(apiKeys);
+    if (keyEntries.length) {
+      document.getElementById('api-keys').innerHTML = keyEntries.map(([key, configured]) => {
+        const name = key.replace(/_/g, ' ').replace(/API KEY/i, '').replace(/KEY/i, '').trim();
+        return `<div class="glass connector-card"><div class="connector-dot ${configured?'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(name)}</h4><p style="font-size:12px;color:var(--txt3)">${configured?'Configured':'Not configured'}</p></div></div>`;
+      }).join('');
+    }
+  } else if (Array.isArray(apiKeys)) {
+    document.getElementById('api-keys').innerHTML = apiKeys.map(s =>
       `<div class="glass connector-card"><div class="connector-dot ${s.configured?'on':'off'}"></div><div><h4 style="font-size:14px;font-weight:600">${esc(s.name)}</h4><p style="font-size:12px;color:var(--txt3)">${s.configured?'Configured':'Not configured'}</p></div></div>`
     ).join('');
   }
@@ -1322,9 +1372,43 @@ function copyModalContent() {
 /* ---------- Chat / Voice ---------- */
 let agentTextBuffer = '';
 let agentReady = false;
+let chatReconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+let chatPermanentError = false;
+
+function finalizeTurn() {
+  const container = document.getElementById('chat-messages');
+  let streaming = container.querySelector('.chat-msg.agent.streaming');
+  if (!streaming && agentTextBuffer.trim()) {
+    streaming = document.createElement('div');
+    streaming.className = 'chat-msg agent';
+    streaming.textContent = agentTextBuffer.trim();
+    container.appendChild(streaming);
+    container.scrollTop = container.scrollHeight;
+  }
+  if (streaming) {
+    streaming.classList.remove('streaming');
+    if (agentTextBuffer.trim()) {
+      conversationMessages.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
+      messagesSinceExtract++;
+      if (conversationMessages.length % 5 === 0) saveConversation();
+      if (messagesSinceExtract >= 10) { extractMemories(); messagesSinceExtract = 0; }
+      try {
+        const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
+        stored.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
+        if (stored.length > 100) stored.splice(0, stored.length - 100);
+        localStorage.setItem('career-os-chat', JSON.stringify(stored));
+      } catch {}
+    }
+  }
+  agentTextBuffer = '';
+  muteAudio = false;
+  stopPlayback();
+}
 
 function initChat() {
   if (ws && ws.readyState <= 1) return; // Don't create duplicate connections
+  if (chatPermanentError) return; // Don't reconnect if there's a permanent error (e.g., missing API key)
   try {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = proto + '//' + location.host + '/ws/gemini';
@@ -1337,7 +1421,14 @@ function initChat() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
-        console.log('[Chat] Received:', msg.type || 'unknown', msg.text ? msg.text.slice(0,50) : '');
+        // Reset silence timer on any content message -- used to detect end of response
+        if (msg.type === 'text' || msg.type === 'audio' || msg.type === 'transcript') {
+          clearTimeout(window._silenceTimer);
+          window._silenceTimer = setTimeout(() => {
+            // No messages for 2 seconds -- treat as turn complete
+            finalizeTurn();
+          }, 2000);
+        }
         if (msg.type === 'ready') {
           agentReady = true;
           appendMessage('system', 'Voice agent ready. Type a message or hold the mic button.');
@@ -1354,29 +1445,24 @@ function initChat() {
           agentTextBuffer += msg.text;
           lastBubble.textContent = agentTextBuffer.trim();
           container.scrollTop = container.scrollHeight;
-        } else if (msg.type === 'turnComplete') {
-          // Finalize the streaming bubble
+        } else if (msg.type === 'transcript' && msg.text) {
+          // Output transcription from native audio model -- use as chat text
           const container = document.getElementById('chat-messages');
-          const streaming = container.querySelector('.chat-msg.agent.streaming');
-          if (streaming) {
-            streaming.classList.remove('streaming');
-            // Track for persistence
-            if (agentTextBuffer.trim()) {
-              conversationMessages.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
-              messagesSinceExtract++;
-              if (conversationMessages.length % 5 === 0) saveConversation();
-              if (messagesSinceExtract >= 10) { extractMemories(); messagesSinceExtract = 0; }
-              try {
-                const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
-                stored.push({ role: 'agent', text: agentTextBuffer.trim(), time: new Date().toISOString() });
-                if (stored.length > 100) stored.splice(0, stored.length - 100);
-                localStorage.setItem('career-os-chat', JSON.stringify(stored));
-              } catch {}
-            }
+          let lastBubble = container.querySelector('.chat-msg.agent.streaming');
+          if (!lastBubble) {
+            lastBubble = document.createElement('div');
+            lastBubble.className = 'chat-msg agent streaming';
+            container.appendChild(lastBubble);
           }
-          agentTextBuffer = '';
-          muteAudio = false;
-          muteAudio = false; // Reset for next interaction
+          agentTextBuffer += msg.text;
+          lastBubble.textContent = agentTextBuffer.trim();
+          container.scrollTop = container.scrollHeight;
+        } else if (msg.type === 'inputTranscript' && msg.text) {
+          // Input transcription -- what the model heard from our mic
+          console.log('[Chat] Heard:', msg.text);
+        } else if (msg.type === 'turnComplete') {
+          clearTimeout(window._silenceTimer);
+          finalizeTurn();
         } else if (msg.type === 'audio' && msg.audio) {
           if (!muteAudio && !audioAlwaysMuted) {
             playAudio(msg.audio, msg.mimeType || 'audio/pcm;rate=24000');
@@ -1384,10 +1470,17 @@ function initChat() {
         } else if (msg.type === 'error') {
           appendMessage('system', 'Error: ' + (msg.error || 'Unknown error'));
           console.error('[Chat] Agent error:', msg.error);
+        } else if (msg.error) {
+          // Server error message (e.g., missing API key)
+          appendMessage('system', 'Error: ' + msg.error);
+          if (msg.error.includes('not configured') || msg.error.includes('API key')) {
+            chatPermanentError = true;
+          }
         }
+        // Successful message resets reconnect counter
+        chatReconnectAttempts = 0;
       } catch(err) {
         console.error('[Chat] Parse error:', err, e.data?.slice?.(0,100));
-        appendMessage('agent', e.data);
       }
     };
     ws.onerror = (err) => {
@@ -1398,8 +1491,18 @@ function initChat() {
       ws = null;
       agentReady = false;
       document.getElementById('chat-status')?.classList.remove('connected');
-      appendMessage('system', 'Disconnected. Reconnecting in 3s...');
-      setTimeout(initChat, 3000);
+      if (chatPermanentError) {
+        appendMessage('system', 'Voice agent unavailable. Check API key configuration.');
+        return;
+      }
+      chatReconnectAttempts++;
+      if (chatReconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+        appendMessage('system', 'Disconnected. Max reconnection attempts reached. Refresh to retry.');
+        return;
+      }
+      const delay = Math.min(3000 * chatReconnectAttempts, 15000);
+      appendMessage('system', 'Disconnected. Reconnecting in ' + Math.round(delay/1000) + 's...');
+      setTimeout(initChat, delay);
     };
   } catch(e) { console.error('[Chat] Init failed:', e); }
 }
@@ -1422,7 +1525,14 @@ function sendMessage() {
 
 function sendToChat(text) {
   appendMessage('user', text);
+  agentTextBuffer = ''; // Reset buffer for new turn
   muteAudio = true; // Mute audio for text-initiated messages
+  // Finalize any stale streaming bubble from a previous incomplete turn
+  const stale = document.querySelector('.chat-msg.agent.streaming');
+  if (stale) {
+    stale.classList.remove('streaming');
+    if (!stale.textContent.trim()) stale.remove();
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'text', content: text }));
   } else {
@@ -1456,14 +1566,16 @@ function appendMessage(role, text) {
     }
   }
 
-  // Also save to localStorage for quick restore
-  try {
-    const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
-    stored.push({ role, text, time: new Date().toISOString() });
-    // Keep last 100 messages
-    if (stored.length > 100) stored.splice(0, stored.length - 100);
-    localStorage.setItem('career-os-chat', JSON.stringify(stored));
-  } catch {}
+  // Also save to localStorage for quick restore (skip system messages)
+  if (role === 'user' || role === 'agent') {
+    try {
+      const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
+      stored.push({ role, text, time: new Date().toISOString() });
+      // Keep last 100 messages
+      if (stored.length > 100) stored.splice(0, stored.length - 100);
+      localStorage.setItem('career-os-chat', JSON.stringify(stored));
+    } catch {}
+  }
 }
 
 function openReportInChat(num) {
@@ -2003,7 +2115,7 @@ document.addEventListener('keydown', (e) => {
 function esc(str) {
   const d = document.createElement('div');
   d.textContent = String(str || '');
-  return d.innerHTML;
+  return d.innerHTML.replace(/'/g, '&#39;');
 }
 
 function showError(msg) {
@@ -2052,8 +2164,8 @@ function restoreConversation() {
   try {
     const stored = JSON.parse(localStorage.getItem('career-os-chat') || '[]');
     const container = document.getElementById('chat-messages');
-    // Only restore last 20 messages
-    const recent = stored.slice(-20);
+    // Only restore last 20 user/agent messages (skip system messages)
+    const recent = stored.filter(m => m.role === 'user' || m.role === 'agent').slice(-20);
     recent.forEach(msg => {
       const div = document.createElement('div');
       div.className = 'chat-msg ' + msg.role;
