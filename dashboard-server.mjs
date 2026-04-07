@@ -1881,6 +1881,98 @@ app.get('/api/conversation/latest', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/chat -- Text chat via Claude API
+// Text chat goes through Claude (not Gemini Live, which is audio-only).
+// This gives proper text responses for typed messages.
+// ---------------------------------------------------------------------------
+
+app.post('/api/chat', async (req, res) => {
+  const { message, history } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message required' });
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+
+  // Build context-rich system prompt
+  const cvContent = readSafe(join(ROOT, 'cv.md')).slice(0, 3000);
+  const profileContent = readSafe(PATHS.profile).slice(0, 2000);
+  const pipelineContent = readSafe(PATHS.pipeline);
+  const pipelineCount = (pipelineContent.match(/^- \[/gm) || []).length;
+  const trackerContent = readSafe(PATHS.tracker);
+  const appCount = (trackerContent.match(/^\|\s*\d+/gm) || []).length;
+
+  // Load memories
+  const memoryPath = join(ROOT, 'data', 'agent-memory.json');
+  let memories = { careerFacts: [], preferences: [], actionItems: [] };
+  try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+
+  const systemPrompt = `You are Career-OS, Stephen C. Webster's AI career coach and assistant. You are direct, warm, and knowledgeable. You help with:
+- Interview preparation and roleplay
+- Resume and cover letter strategy
+- Job search and application decisions
+- Salary negotiation tactics
+- Career narrative and positioning
+
+STEPHEN'S BACKGROUND:
+${cvContent ? cvContent.slice(0, 2000) : 'CV not loaded.'}
+
+CURRENT STATUS:
+- ${pipelineCount} offers in pipeline
+- ${appCount} applications tracked
+- Targeting: CAIO, VP of AI, CTO roles
+- Target comp: $200K+ base
+
+${memories.careerFacts?.length ? 'KNOWN FACTS:\n' + memories.careerFacts.map(f => '- ' + f.content).join('\n') : ''}
+${memories.actionItems?.filter(a => a.status === 'pending').length ? 'PENDING ACTIONS:\n' + memories.actionItems.filter(a => a.status === 'pending').map(a => '- ' + a.action).join('\n') : ''}
+
+Keep responses concise (2-4 sentences for simple questions, longer for complex analysis). Be actionable. Use Stephen's actual metrics and proof points when relevant. Don't be sycophantic.`;
+
+  // Build messages array from history
+  const messages = [];
+  if (history && Array.isArray(history)) {
+    // Include last 10 messages for context
+    const recent = history.slice(-10);
+    for (const msg of recent) {
+      messages.push({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.text || msg.content || ''
+      });
+    }
+  }
+  messages.push({ role: 'user', content: message });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      log('ERROR', `Claude API error: ${response.status} ${err.slice(0, 200)}`);
+      return res.status(500).json({ error: 'Claude API error: ' + response.status });
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || 'No response generated.';
+    res.json({ response: text });
+  } catch (err) {
+    log('ERROR', `Chat error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // SPA fallback -- send index.html for any unmatched GET request
 // ---------------------------------------------------------------------------
 

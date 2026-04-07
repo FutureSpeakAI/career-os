@@ -179,6 +179,8 @@ input:focus,select:focus{border-color:var(--cy)}
 .chat-msg{max-width:85%;padding:10px 14px;border-radius:var(--radius);font-size:13px;line-height:1.5;word-break:break-word}
 .chat-msg.user{align-self:flex-end;background:rgba(0,240,255,.12);color:var(--cy);border:1px solid rgba(0,240,255,.15)}
 .chat-msg.agent{align-self:flex-start;background:var(--bg2);color:var(--txt);border:1px solid var(--border)}
+.chat-msg.thinking{color:var(--txt2);font-style:italic;opacity:0.6}
+.chat-msg.speaking{color:var(--cy);font-style:italic;opacity:0.7;animation:pulse 1.5s ease infinite}
 /* Chat input */
 .chat-input-bar{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
 .chat-input-bar input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:10px 16px;color:var(--txt);font-size:13px}
@@ -1377,6 +1379,9 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 let chatPermanentError = false;
 
 function finalizeTurn() {
+  // Remove speaking indicator
+  const speaking = document.querySelector('.chat-msg.agent.speaking');
+  if (speaking) speaking.remove();
   const container = document.getElementById('chat-messages');
   let streaming = container.querySelector('.chat-msg.agent.streaming');
   if (!streaming && agentTextBuffer.trim()) {
@@ -1434,30 +1439,9 @@ function initChat() {
           appendMessage('system', 'Voice agent ready. Type a message or hold the mic button.');
           document.getElementById('chat-status')?.classList.add('connected');
         } else if (msg.type === 'text' && msg.text) {
-          // Native audio model sends thinking + spoken text together.
-          // Strip the **Bold Heading** thinking pattern and show the rest.
-          let cleaned = msg.text.replace(/\*\*[^*]+\*\*\s*/g, '').trim();
-          // Remove meta-commentary lines (starts with "I've", "I'm", "My ", "The user", "I acknowledge")
-          cleaned = cleaned.split('\n').filter(line => {
-            const l = line.trim().toLowerCase();
-            return l && !l.startsWith("i've ") && !l.startsWith("i'm ") && !l.startsWith("my ") &&
-                   !l.startsWith("the user") && !l.startsWith("i acknowledge") && !l.startsWith("i need to") &&
-                   !l.startsWith("i should") && !l.startsWith("i want to") && !l.startsWith("i will") &&
-                   !l.startsWith("considering") && !l.startsWith("let me");
-          }).join(' ').trim();
-          if (cleaned) {
-            const container = document.getElementById('chat-messages');
-            let lastBubble = container.querySelector('.chat-msg.agent.streaming');
-            if (!lastBubble) {
-              lastBubble = document.createElement('div');
-              lastBubble.className = 'chat-msg agent streaming';
-              container.appendChild(lastBubble);
-            }
-            agentTextBuffer += cleaned + ' ';
-            lastBubble.textContent = agentTextBuffer.trim();
-            container.scrollTop = container.scrollHeight;
-          }
-          console.log('[Chat] Model text (raw):', msg.text.slice(0, 80));
+          // Native audio model thinking text -- only log, don't display
+          // The audio IS the response for voice interactions
+          console.log('[Voice] Model thinking:', msg.text.slice(0, 60));
         } else if (msg.type === 'transcript' && msg.text) {
           // Output transcription -- what the model actually SAID (this is the real response)
           const container = document.getElementById('chat-messages');
@@ -1477,6 +1461,15 @@ function initChat() {
           clearTimeout(window._silenceTimer);
           finalizeTurn();
         } else if (msg.type === 'audio' && msg.audio) {
+          // Show speaking indicator if no streaming bubble exists
+          if (!document.querySelector('.chat-msg.agent.speaking')) {
+            const container = document.getElementById('chat-messages');
+            const speaking = document.createElement('div');
+            speaking.className = 'chat-msg agent speaking';
+            speaking.textContent = 'Speaking...';
+            container.appendChild(speaking);
+            container.scrollTop = container.scrollHeight;
+          }
           if (!muteAudio && !audioAlwaysMuted) {
             playAudio(msg.audio, msg.mimeType || 'audio/pcm;rate=24000');
           }
@@ -1536,21 +1529,37 @@ function sendMessage() {
   sendToChat(text);
 }
 
-function sendToChat(text) {
+async function sendToChat(text) {
   appendMessage('user', text);
-  agentTextBuffer = ''; // Reset buffer for new turn
-  muteAudio = true; // Mute audio for text-initiated messages
-  // Finalize any stale streaming bubble from a previous incomplete turn
+  agentTextBuffer = '';
+  // Clean up stale streaming bubbles
   const stale = document.querySelector('.chat-msg.agent.streaming');
-  if (stale) {
-    stale.classList.remove('streaming');
-    if (!stale.textContent.trim()) stale.remove();
-  }
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'text', content: text }));
-  } else {
-    appendMessage('agent', 'Connection lost. Reconnecting...');
-    initChat();
+  if (stale) { stale.classList.remove('streaming'); if (!stale.textContent.trim()) stale.remove(); }
+
+  // Text input -> Claude API (not Gemini voice)
+  const container = document.getElementById('chat-messages');
+  const thinkingDiv = document.createElement('div');
+  thinkingDiv.className = 'chat-msg agent thinking';
+  thinkingDiv.textContent = 'Thinking...';
+  container.appendChild(thinkingDiv);
+  container.scrollTop = container.scrollHeight;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: conversationMessages.slice(-10) })
+    });
+    const data = await res.json();
+    thinkingDiv.remove();
+    if (data.error) {
+      appendMessage('system', 'Error: ' + data.error);
+    } else {
+      appendMessage('agent', data.response);
+    }
+  } catch (err) {
+    thinkingDiv.remove();
+    appendMessage('system', 'Connection error: ' + err.message);
   }
 }
 
