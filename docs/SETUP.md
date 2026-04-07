@@ -2,123 +2,110 @@
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) installed and configured
-- Node.js 18+ (for PDF generation and utility scripts)
-- (Optional) Go 1.21+ (for the dashboard TUI)
+- [Node.js 18+](https://nodejs.org/) (required)
+- [Claude Code](https://claude.ai/code) (for CLI interface)
+- API keys (see below)
 
-## Recommended: Setup via Claude Code
-
-Create a folder, open Claude Code, and type one command:
-
-```bash
-mkdir career && cd career
-claude
-```
-
-Then inside Claude Code:
-
-```
-/career-os setup
-```
-
-This clones the repo, installs all dependencies, and starts an interactive profile interview. Everything is automatic -- you just answer the questions.
-
-## Alternative: npm setup (without Claude Code)
-
-If you prefer to install dependencies manually before launching Claude:
+## Install
 
 ```bash
 git clone https://github.com/FutureSpeakAI/career-os.git
 cd career-os
 npm run setup
-claude
 ```
 
-The `npm run setup` script automatically:
-1. Installs npm dependencies
+The setup script automatically:
+1. Installs npm dependencies (Express, WebSocket, Playwright, dotenv)
 2. Installs Playwright Chromium (for PDF generation)
 3. Scaffolds config files from templates
 4. Creates data directories
-5. Builds the dashboard TUI (if Go is available)
-6. Validates the installation
+5. Creates `.env` from `.env.example`
+6. Validates API key configuration
+7. Checks web dashboard readiness
+8. Validates the installation
 
-## Manual Setup (if you prefer)
+## API Keys
 
-### 1. Clone and install
-
-```bash
-git clone https://github.com/FutureSpeakAI/career-os.git
-cd career-os
-npm install
-npx playwright install chromium
-```
-
-### 2. Configure your profile
+Copy `.env.example` to `.env` (setup does this automatically) and add your keys:
 
 ```bash
-cp config/profile.example.yml config/profile.yml
+# Required for voice agent
+GEMINI_API_KEY=your-key-here
+
+# Required for AI content generation (resumes, cover letters, emails)
+ANTHROPIC_API_KEY=your-key-here
+
+# Optional
+OPENAI_API_KEY=          # Alternative LLM evaluation
+OPENROUTER_API_KEY=      # Multi-model batch routing
+PERPLEXITY_API_KEY=      # Deep company research
+FIRECRAWL_API_KEY=       # Advanced JD extraction
+ELEVENLABS_API_KEY=      # High-quality TTS
+LOGO_DEV_PUBLISHABLE_KEY= # Company logos
+HUGGINGFACE_TOKEN=       # Open-source model access
 ```
 
-Edit `config/profile.yml` with your personal details: name, email, target roles, narrative, proof points.
+Where to get keys:
+- **Gemini**: [Google AI Studio](https://aistudio.google.com/apikey)
+- **Anthropic**: [Anthropic Console](https://console.anthropic.com/)
+- **OpenAI**: [OpenAI Platform](https://platform.openai.com/)
+- **Perplexity**: [Perplexity API](https://www.perplexity.ai/)
 
-### 3. Add your CV
-
-Create `cv.md` in the project root with your full CV in markdown format. This is the source of truth for all evaluations and PDFs.
-
-(Optional) Create `article-digest.md` with proof points from your portfolio projects/articles.
-
-### 4. Configure portals
+## Start the Web Dashboard
 
 ```bash
-cp templates/portals.example.yml portals.yml
+npm start
 ```
 
-Edit `portals.yml`:
-- Update `title_filter.positive` with keywords matching your target roles
-- Add companies you want to track in `tracked_companies`
-- Customize `search_queries` for your preferred job boards
+Open `http://localhost:3333` in your browser. The dashboard includes:
+- 12 interactive tabs for all Career-OS features
+- Gemini Live voice agent (right sidebar)
+- AI content generation buttons
+- In-browser CV/profile/portal editors
 
-### 5. Start using
-
-Open Claude Code in this directory:
+## Start with Claude Code (CLI)
 
 ```bash
 claude
 ```
 
-Then paste a job offer URL or description. Career-OS will automatically evaluate it, generate a report, create a tailored PDF, and track it.
+Then type `/career-os setup` for the profile interview, or `/career-os` to see all commands.
 
-## Available Commands
+## MCP Connectors (Optional)
 
-| Action | How |
-|--------|-----|
-| Evaluate an offer | Paste a URL or JD text |
-| Search for offers | `/career-os scan` |
-| Process pending URLs | `/career-os pipeline` |
-| Generate a PDF | `/career-os pdf` |
-| Batch evaluate | `/career-os batch` |
-| Check tracker status | `/career-os tracker` |
-| Fill application form | `/career-os apply` |
-| LinkedIn outreach | `/career-os outreach` |
-| Compare offers | `/career-os compare` |
-| Company research | `/career-os deep` |
+These are connected through Claude Code's MCP settings, not API keys:
 
-## Verify Setup
+| Service | Purpose |
+|---------|---------|
+| Gmail | Inbox monitoring, draft responses |
+| Google Calendar | Interview scheduling |
+| Box | Cloud document storage |
+| Canva | Visual design |
+| Figma | Architecture diagrams |
+
+See [CONNECTIVITY.md](CONNECTIVITY.md) for MCP setup instructions.
+
+## Profile Configuration
+
+After setup, personalize your profile either:
+
+1. **Via Claude Code**: Run `/career-os setup` for a guided interview
+2. **Via Web Dashboard**: Go to Settings tab and edit profile.yml
+3. **Manually**: Edit `config/profile.yml` with your details
+
+Key fields:
+- `candidate`: name, email, location, LinkedIn, GitHub
+- `target_roles`: primary and secondary roles with archetypes
+- `narrative`: headline, exit story, superpowers, proof points
+- `compensation`: target, minimum, current
+- `application_defaults`: work authorization, relocation, EEO info
+
+## Verify Installation
 
 ```bash
-npm run sync-check     # Check configuration
+npm run sync-check     # Validate configuration
 npm run verify         # Check pipeline integrity
 npm test               # Run test suite
-```
-
-## Build Dashboard (Optional)
-
-Requires Go 1.21+:
-
-```bash
-cd dashboard
-go build -o career-dashboard .
-./career-dashboard
 ```
 
 ## Attribution
