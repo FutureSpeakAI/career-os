@@ -303,6 +303,52 @@ input:focus,select:focus{border-color:var(--cy)}
 .rec-urgency.urgency-low{background:var(--green)}
 .rec-card .rec-info h4{font-size:13px;font-weight:600}
 .rec-card .rec-info p{font-size:12px;color:var(--txt2)}
+/* Briefing Card */
+.briefing-card{background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);border-left:3px solid;border-image:linear-gradient(180deg,var(--cy),var(--pu)) 1;border-radius:var(--radius);padding:20px 24px;margin-bottom:16px;box-shadow:var(--glow);position:relative}
+.briefing-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.briefing-header h3{font-size:18px;font-weight:600}
+.briefing-dismiss{background:none;border:none;color:var(--txt3);font-size:22px;cursor:pointer;padding:4px 8px;line-height:1;transition:color .2s}
+.briefing-dismiss:hover{color:var(--txt)}
+.briefing-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:12px}
+@media(max-width:900px){.briefing-body{grid-template-columns:1fr}}
+.briefing-section h4{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--txt3);margin-bottom:6px;font-weight:600}
+.briefing-section p,.briefing-section li{font-size:13px;color:var(--txt2);line-height:1.6}
+.briefing-section ul{list-style:none;padding:0}
+.briefing-section li{padding:3px 0;display:flex;align-items:center;gap:6px}
+.briefing-section li::before{content:'';width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.briefing-section li.overdue::before{background:var(--orange)}
+.briefing-section li.interview::before{background:var(--red)}
+.briefing-section li.rec-high::before{background:var(--red)}
+.briefing-section li.rec-medium::before{background:var(--orange)}
+.briefing-section li.rec-low::before{background:var(--green)}
+.briefing-suggestion{background:rgba(0,240,255,.04);border:1px solid rgba(0,240,255,.1);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--cy);margin-bottom:12px}
+.briefing-actions{display:flex;gap:8px;flex-wrap:wrap}
+/* Notification Bell */
+.notif-wrapper{position:relative;display:inline-flex}
+.notif-bell{background:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--txt2);cursor:pointer;font-size:16px;transition:all .2s;position:relative;line-height:1}
+.notif-bell:hover{border-color:rgba(0,240,255,.3);color:var(--cy)}
+.notif-count{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+.notif-count.hidden{display:none}
+.notif-dropdown{position:absolute;top:100%;right:0;margin-top:8px;width:360px;max-height:400px;overflow-y:auto;background:rgba(6,11,25,0.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 40px rgba(0,0,0,.4);z-index:500;display:none}
+.notif-dropdown.open{display:block}
+.notif-dropdown-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--txt)}
+.notif-item{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.03);display:flex;gap:10px;align-items:flex-start;transition:background .2s}
+.notif-item:hover{background:rgba(0,240,255,.02)}
+.notif-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.notif-icon.warn{background:rgba(245,158,11,.15);color:var(--orange)}
+.notif-icon.info{background:rgba(0,240,255,.1);color:var(--cy)}
+.notif-icon.danger{background:rgba(239,68,68,.12);color:var(--red)}
+.notif-body{flex:1;min-width:0}
+.notif-body h5{font-size:13px;font-weight:600;margin-bottom:2px;color:var(--txt)}
+.notif-body p{font-size:12px;color:var(--txt2);line-height:1.4}
+.notif-actions{display:flex;gap:4px;margin-top:6px}
+.notif-empty{padding:32px 16px;text-align:center;color:var(--txt3);font-size:13px}
+/* Workflow Progress Modal */
+.workflow-progress{text-align:center;padding:40px 20px}
+.workflow-progress .step{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:13px;color:var(--txt2)}
+.workflow-progress .step .step-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;border:1px solid var(--border);color:var(--txt3)}
+.workflow-progress .step.active .step-icon{background:rgba(0,240,255,.15);border-color:var(--cy);color:var(--cy)}
+.workflow-progress .step.done .step-icon{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green)}
 </style>
 </head>
 <body>
@@ -317,10 +363,17 @@ input:focus,select:focus{border-color:var(--cy)}
         <div class="brand-tagline">FutureSpeak.AI | Career Advancement OS</div>
       </div>
     </div>
-    <div class="header-links">
+    <div class="header-links flex items-center gap-3">
       <a href="#" id="link-linkedin" target="_blank">LinkedIn</a>
       <a href="#" id="link-github" target="_blank">GitHub</a>
       <a href="https://futurespeak.ai" target="_blank">FutureSpeak.AI</a>
+      <div class="notif-wrapper">
+        <button class="notif-bell" onclick="toggleNotifDropdown()" title="Notifications">&#128276;<span class="notif-count hidden" id="notif-count">0</span></button>
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-dropdown-header">Notifications</div>
+          <div id="notif-list"><div class="notif-empty">No notifications</div></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -344,6 +397,17 @@ input:focus,select:focus{border-color:var(--cy)}
     <div class="glass stat-card"><div class="stat-num" id="s-interviews">0</div><div class="stat-label mono">Interviews</div></div>
     <div class="glass stat-card"><div class="stat-num" id="s-contacts">0</div><div class="stat-label mono">Contacts</div></div>
     <div class="glass stat-card"><div class="stat-num" id="s-response">0%</div><div class="stat-label mono">Response Rate</div></div>
+  </div>
+
+  <!-- MORNING BRIEFING -->
+  <div id="briefing-card" class="briefing-card" style="display:none">
+    <div class="briefing-header">
+      <h3 class="grad-text" id="briefing-greeting">Good morning.</h3>
+      <button class="briefing-dismiss" onclick="dismissBriefing()">&times;</button>
+    </div>
+    <div id="briefing-suggestion" class="briefing-suggestion" style="display:none"></div>
+    <div class="briefing-body" id="briefing-body"></div>
+    <div class="briefing-actions" id="briefing-actions"></div>
   </div>
 
   <!-- TAB NAVIGATION -->
@@ -378,6 +442,8 @@ input:focus,select:focus{border-color:var(--cy)}
         <button class="btn btn-cy" onclick="openEvaluateModal()">Evaluate JD</button>
         <button class="btn btn-pu" id="scan-btn" onclick="runScan()">Run Scan</button>
         <button class="btn btn-pu" id="verify-all-btn" onclick="verifyAll()">Verify All Listings</button>
+        <button class="btn btn-cy" id="full-pipeline-btn" onclick="runFullPipeline()">Full Pipeline</button>
+        <button class="btn btn-ghost" id="followup-batch-btn" onclick="runFollowUpBatch()">Generate Follow-ups</button>
       </div>
       <div class="tbl-wrap">
         <table class="tbl" id="pipeline-table">
@@ -457,6 +523,7 @@ input:focus,select:focus{border-color:var(--cy)}
           </select>
         </div>
         <button class="roleplay-start" onclick="startRoleplay()">Start Roleplay</button>
+        <button class="btn btn-cy" style="margin-left:12px" onclick="runAutoPrep()">Auto-Prep Selected</button>
       </div>
       <div style="text-align:center;margin-top:16px">
         <button class="btn btn-cy" onclick="generateContent('interview-prep','')">Generate Prep Brief</button>
@@ -842,6 +909,8 @@ async function loadData() {
   if (!Array.isArray(DATA.contacts)) DATA.contacts = [];
   if (!Array.isArray(DATA.reports)) DATA.reports = [];
   renderAll();
+  loadBriefing();
+  loadNotifications();
 }
 
 function renderAll() {
@@ -2221,6 +2290,391 @@ function restoreConversation() {
     }
   } catch {}
 }
+
+/* ---------- Morning Briefing ---------- */
+async function loadBriefing() {
+  // Check if dismissed today
+  const dismissed = localStorage.getItem('career-os-briefing-dismissed');
+  const today = new Date().toISOString().split('T')[0];
+  if (dismissed === today) return;
+
+  try {
+    const res = await fetch(API + '/api/briefing');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderBriefing(data);
+  } catch (e) {
+    console.warn('[Briefing] Failed to load:', e.message);
+  }
+}
+
+function renderBriefing(data) {
+  const card = document.getElementById('briefing-card');
+  if (!card) return;
+
+  document.getElementById('briefing-greeting').textContent = data.greeting || 'Good morning.';
+
+  // Suggestion
+  const sugEl = document.getElementById('briefing-suggestion');
+  if (data.suggestion) {
+    sugEl.textContent = data.suggestion;
+    sugEl.style.display = 'block';
+  }
+
+  // Body: three columns -- Pipeline Summary, Follow-ups/Interviews, Recommendations
+  const body = document.getElementById('briefing-body');
+  let html = '';
+
+  // Column 1: Pipeline
+  const p = data.pipeline || {};
+  html += '<div class="briefing-section"><h4>Pipeline</h4>';
+  html += '<p><span style="font-family:\'Fira Code\',monospace;font-size:20px;color:var(--cy)">' + (p.total || 0).toLocaleString() + '</span> total offers</p>';
+  html += '<p style="margin-top:4px"><span style="color:#b57edc;font-weight:600">' + (p.cSuite || 0) + '</span> C-Suite &middot; <span style="color:var(--cy);font-weight:600">' + (p.director || 0) + '</span> Director</p>';
+  if (data.daysSinceLastScan !== null && data.daysSinceLastScan !== undefined) {
+    html += '<p style="margin-top:4px;font-size:12px;color:var(--txt3)">Last scan: ' + (data.daysSinceLastScan === 0 ? 'today' : data.daysSinceLastScan + 'd ago') + '</p>';
+  }
+  html += '</div>';
+
+  // Column 2: Tracker alerts
+  const t = data.tracker || {};
+  html += '<div class="briefing-section"><h4>Alerts</h4><ul>';
+  if ((t.overdueFollowUps || []).length > 0) {
+    t.overdueFollowUps.forEach(f => {
+      html += '<li class="overdue">' + esc(f.company) + ' -- ' + f.daysAgo + 'd overdue</li>';
+    });
+  }
+  if ((t.upcomingInterviews || []).length > 0) {
+    t.upcomingInterviews.forEach(iv => {
+      html += '<li class="interview">' + esc(iv.company) + ' -- Interview</li>';
+    });
+  }
+  if ((data.actionItems || []).length > 0) {
+    data.actionItems.slice(0, 2).forEach(a => {
+      html += '<li class="rec-medium">' + esc(a.action) + '</li>';
+    });
+  }
+  if (!t.overdueFollowUps?.length && !t.upcomingInterviews?.length && !data.actionItems?.length) {
+    html += '<li style="color:var(--txt3)">No urgent alerts</li>';
+  }
+  html += '</ul></div>';
+
+  // Column 3: Recommendations
+  html += '<div class="briefing-section"><h4>Recommendations</h4><ul>';
+  if ((data.recommendations || []).length > 0) {
+    data.recommendations.slice(0, 3).forEach(r => {
+      html += '<li class="rec-' + (r.urgency || 'medium') + '">' + esc(r.company) + ' -- ' + esc(r.title) + '</li>';
+    });
+  } else {
+    html += '<li style="color:var(--txt3)">No recommendations yet</li>';
+  }
+  html += '</ul></div>';
+
+  body.innerHTML = html;
+
+  // Actions
+  const actions = document.getElementById('briefing-actions');
+  let actHtml = '';
+  if ((t.overdueFollowUps || []).length > 0) {
+    actHtml += '<button class="btn btn-sm btn-pu" onclick="runFollowUpBatch()">Draft Follow-ups</button>';
+  }
+  if ((data.recommendations || []).length > 0) {
+    actHtml += '<button class="btn btn-sm btn-cy" onclick="switchTab(\'pipeline\')">Evaluate Top Roles</button>';
+  }
+  if (data.daysSinceLastScan > 2) {
+    actHtml += '<button class="btn btn-sm btn-ghost" onclick="runScan()">Run Scan</button>';
+  }
+  actions.innerHTML = actHtml;
+
+  card.style.display = 'block';
+}
+
+function dismissBriefing() {
+  const today = new Date().toISOString().split('T')[0];
+  localStorage.setItem('career-os-briefing-dismissed', today);
+  document.getElementById('briefing-card').style.display = 'none';
+}
+
+/* ---------- Notifications ---------- */
+let notifData = [];
+
+async function loadNotifications() {
+  try {
+    const res = await fetch(API + '/api/notifications');
+    if (!res.ok) return;
+    const data = await res.json();
+    notifData = data.notifications || [];
+    renderNotifications();
+  } catch (e) {
+    console.warn('[Notifications] Failed to load:', e.message);
+  }
+}
+
+function renderNotifications() {
+  const countEl = document.getElementById('notif-count');
+  const listEl = document.getElementById('notif-list');
+  if (!countEl || !listEl) return;
+
+  const dismissed = JSON.parse(localStorage.getItem('career-os-notif-dismissed') || '[]');
+  const active = notifData.filter(n => !dismissed.includes(n.id));
+
+  if (active.length > 0) {
+    countEl.textContent = active.length;
+    countEl.classList.remove('hidden');
+  } else {
+    countEl.classList.add('hidden');
+  }
+
+  if (active.length === 0) {
+    listEl.innerHTML = '<div class="notif-empty">All clear -- no notifications</div>';
+    return;
+  }
+
+  const iconMap = {
+    overdue: { icon: '&#9888;', cls: 'warn' },
+    stale: { icon: '&#128337;', cls: 'info' },
+    no_scan: { icon: '&#128269;', cls: 'info' },
+    no_apps: { icon: '&#128203;', cls: 'info' },
+    interview_soon: { icon: '&#127908;', cls: 'danger' },
+    action_pending: { icon: '&#9998;', cls: 'info' },
+    suggestion: { icon: '&#128161;', cls: 'info' },
+  };
+
+  listEl.innerHTML = active.map(n => {
+    const ico = iconMap[n.type] || { icon: '&#128276;', cls: 'info' };
+    let actionBtn = '';
+    switch (n.action) {
+      case 'draft_email':
+        actionBtn = '<button class="btn btn-sm btn-cy" onclick="generateContent(\'email-draft\',\'\',\'Follow-up for ' + esc(n.actionData?.company || '') + '\');closeNotifDropdown()">Draft</button>';
+        break;
+      case 'verify_all':
+        actionBtn = '<button class="btn btn-sm btn-cy" onclick="verifyAll();closeNotifDropdown()">Verify</button>';
+        break;
+      case 'run_scan':
+        actionBtn = '<button class="btn btn-sm btn-cy" onclick="runScan();closeNotifDropdown()">Scan</button>';
+        break;
+      case 'workflow_pipeline':
+        actionBtn = '<button class="btn btn-sm btn-cy" onclick="runFullPipeline();closeNotifDropdown()">Run Pipeline</button>';
+        break;
+      case 'interview_prep':
+        actionBtn = '<button class="btn btn-sm btn-cy" onclick="runAutoPrep(\'' + esc(n.actionData?.company || '') + '\',\'' + esc(n.actionData?.role || '') + '\');closeNotifDropdown()">Prep</button>';
+        break;
+      case 'view_actions':
+        actionBtn = '<button class="btn btn-sm btn-ghost" onclick="switchTab(\'analytics\');closeNotifDropdown()">View</button>';
+        break;
+      case 'view_tracker':
+        actionBtn = '<button class="btn btn-sm btn-ghost" onclick="switchTab(\'tracker\');closeNotifDropdown()">View</button>';
+        break;
+    }
+    return '<div class="notif-item">' +
+      '<div class="notif-icon ' + ico.cls + '">' + ico.icon + '</div>' +
+      '<div class="notif-body"><h5>' + esc(n.title) + '</h5><p>' + esc(n.body) + '</p>' +
+      '<div class="notif-actions">' + actionBtn +
+      '<button class="btn btn-sm btn-ghost" onclick="dismissNotification(\'' + n.id + '\')">&times;</button></div></div></div>';
+  }).join('');
+}
+
+function toggleNotifDropdown() {
+  const dd = document.getElementById('notif-dropdown');
+  dd.classList.toggle('open');
+}
+
+function closeNotifDropdown() {
+  document.getElementById('notif-dropdown').classList.remove('open');
+}
+
+function dismissNotification(id) {
+  const dismissed = JSON.parse(localStorage.getItem('career-os-notif-dismissed') || '[]');
+  if (!dismissed.includes(id)) dismissed.push(id);
+  // Only keep last 50 dismissed IDs
+  if (dismissed.length > 50) dismissed.splice(0, dismissed.length - 50);
+  localStorage.setItem('career-os-notif-dismissed', JSON.stringify(dismissed));
+  renderNotifications();
+}
+
+// Close notification dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const wrapper = document.querySelector('.notif-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    closeNotifDropdown();
+  }
+});
+
+// Refresh notifications every 60 seconds
+setInterval(loadNotifications, 60000);
+
+/* ---------- Workflow: Full Pipeline ---------- */
+async function runFullPipeline() {
+  const btn = document.getElementById('full-pipeline-btn');
+  if (btn) { btn.innerHTML = '<span class="spinner"></span> Running...'; btn.disabled = true; }
+
+  openModal('Full Pipeline Workflow', '<div class="workflow-progress">' +
+    '<div class="step active" id="wp-scan"><div class="step-icon"><span class="spinner" style="width:14px;height:14px;border-width:2px"></span></div>Scanning portals...</div>' +
+    '<div class="step" id="wp-eval"><div class="step-icon">2</div>Evaluating top offers</div>' +
+    '<div class="step" id="wp-gen"><div class="step-icon">3</div>Generating materials</div>' +
+    '</div>');
+
+  try {
+    const res = await fetch(API + '/api/workflow/full-pipeline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: 5 }),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+
+    let resultHtml = '<div style="font-family:Inter,sans-serif">';
+    resultHtml += '<h4 style="color:var(--cy);margin-bottom:12px">Scan Results</h4>';
+    resultHtml += '<p style="font-size:13px;color:var(--txt2);margin-bottom:16px">Found ' + (data.scanned?.found || 0) + ' jobs, added ' + (data.scanned?.added || 0) + ' new entries</p>';
+
+    if (data.evaluated?.length) {
+      resultHtml += '<h4 style="color:var(--cy);margin-bottom:8px">Evaluations</h4>';
+      resultHtml += '<div style="margin-bottom:16px">';
+      data.evaluated.forEach(e => {
+        const sc = e.score >= 4.0 ? 'score-high' : e.score >= 3.0 ? 'score-good' : 'score-low';
+        resultHtml += '<div class="glass" style="padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
+        resultHtml += '<div><strong>' + esc(e.company) + '</strong> -- ' + esc(e.role) + '</div>';
+        resultHtml += '<span class="mono ' + sc + '" style="font-weight:600">' + (e.score || 0) + '/5</span></div>';
+      });
+      resultHtml += '</div>';
+    }
+
+    if (data.materials?.length) {
+      resultHtml += '<h4 style="color:var(--cy);margin-bottom:8px">Materials Generated</h4>';
+      data.materials.forEach(m => {
+        resultHtml += '<div class="glass" style="padding:10px 14px;margin-bottom:6px">';
+        resultHtml += '<strong>' + esc(m.company) + '</strong> -- ' + esc(m.role) + ' (resume + cover letter)';
+        resultHtml += '</div>';
+      });
+    }
+
+    resultHtml += '</div>';
+    openModal('Pipeline Workflow Complete', resultHtml);
+    showToast('Full pipeline workflow complete', 'success');
+    loadData(); // Refresh all data
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Pipeline workflow failed: ' + esc(e.message) + '</div>');
+  }
+  if (btn) { btn.textContent = 'Full Pipeline'; btn.disabled = false; }
+}
+
+/* ---------- Workflow: Follow-up Batch ---------- */
+async function runFollowUpBatch() {
+  const btn = document.getElementById('followup-batch-btn');
+  if (btn) { btn.innerHTML = '<span class="spinner"></span> Generating...'; btn.disabled = true; }
+
+  openModal('Generating Follow-ups...', '<div style="text-align:center;padding:40px"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Drafting follow-up emails for overdue applications...</div>');
+
+  try {
+    const res = await fetch(API + '/api/workflow/follow-up-batch', { method: 'POST' });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+
+    if (!data.drafts || data.drafts.length === 0) {
+      openModal('No Follow-ups Needed', '<p style="color:var(--txt2);font-size:13px;padding:20px">' + (data.message || 'No overdue applications found.') + '</p>');
+    } else {
+      let html = '<div style="font-family:Inter,sans-serif">';
+      data.drafts.forEach((d, i) => {
+        html += '<div class="glass" style="padding:16px;margin-bottom:12px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+        html += '<h4 style="font-size:14px;font-weight:600">' + esc(d.company) + ' -- ' + esc(d.role) + '</h4>';
+        html += '<span class="pill pill-csuite">' + d.daysAgo + 'd overdue</span></div>';
+        html += '<div style="background:var(--bg);padding:12px;border-radius:var(--radius-sm);font-family:\'Fira Code\',monospace;font-size:12px;white-space:pre-wrap;color:var(--txt2);max-height:150px;overflow-y:auto">' + esc(d.draft) + '</div>';
+        html += '<button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(' + JSON.stringify(d.draft) + ');showToast(\'Draft copied\',\'success\')">Copy Draft</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+      openModal('Follow-up Drafts (' + data.drafts.length + ')', html);
+      showToast(data.drafts.length + ' follow-up draft(s) generated', 'success');
+    }
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Follow-up batch failed: ' + esc(e.message) + '</div>');
+  }
+  if (btn) { btn.textContent = 'Generate Follow-ups'; btn.disabled = false; }
+}
+
+/* ---------- Workflow: Auto Interview Prep ---------- */
+async function runAutoPrep(company, role) {
+  // If called without arguments, use the roleplay dropdown selection
+  if (!company) {
+    const sel = document.getElementById('rp-role');
+    const roleId = sel?.value;
+    if (!roleId) { showToast('Select an application first', 'error'); return; }
+    const appEntry = DATA.tracker.find(r => String(r.num) === roleId);
+    if (!appEntry) { showToast('Application not found', 'error'); return; }
+    company = appEntry.company;
+    role = appEntry.role;
+  }
+
+  openModal('Generating Interview Prep...', '<div style="text-align:center;padding:40px"><span class="spinner" style="width:32px;height:32px;border-width:3px"></span><br><br>Researching ' + esc(company) + ' and generating prep materials...</div>');
+
+  try {
+    const res = await fetch(API + '/api/workflow/interview-prep', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company, role: role || '' }),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = await res.json();
+
+    let html = '<div style="font-family:Inter,sans-serif">';
+
+    // Company research
+    if (data.research && (data.research.summary || data.research.aiStrategy)) {
+      html += '<h4 style="color:var(--cy);margin-bottom:8px">Company Intelligence</h4>';
+      html += '<div class="glass" style="padding:14px;margin-bottom:16px">';
+      if (data.research.summary) html += '<p style="font-size:13px;color:var(--txt2);margin-bottom:8px">' + esc(data.research.summary) + '</p>';
+      if (data.research.aiStrategy) html += '<p style="font-size:12px;color:var(--txt3)"><strong>AI Strategy:</strong> ' + esc(data.research.aiStrategy) + '</p>';
+      if (data.research.angle) html += '<p style="font-size:12px;color:var(--cy);margin-top:6px"><strong>Your Angle:</strong> ' + esc(data.research.angle) + '</p>';
+      html += '</div>';
+    }
+
+    // Prep content
+    if (data.prepContent) {
+      html += '<h4 style="color:var(--cy);margin-bottom:8px">Interview Prep</h4>';
+      html += '<div style="background:var(--bg);padding:14px;border-radius:var(--radius-sm);font-family:\'Fira Code\',monospace;font-size:12px;white-space:pre-wrap;color:var(--txt2);max-height:300px;overflow-y:auto;margin-bottom:16px">' + esc(data.prepContent) + '</div>';
+    }
+
+    // Stories
+    if (data.stories && data.stories.length) {
+      html += '<h4 style="color:var(--cy);margin-bottom:8px">Relevant STAR Stories (' + data.stories.length + ')</h4>';
+      data.stories.slice(0, 5).forEach(s => {
+        html += '<div class="glass" style="padding:10px 14px;margin-bottom:6px"><strong>' + esc(s.title) + '</strong><p style="font-size:12px;color:var(--txt3);margin-top:4px">' + esc(s.body) + '</p></div>';
+      });
+    }
+
+    html += '</div>';
+    openModal('Interview Prep: ' + esc(company), html);
+    showToast('Interview prep complete for ' + company, 'success');
+  } catch (e) {
+    openModal('Error', '<div class="error-msg">Interview prep failed: ' + esc(e.message) + '</div>');
+  }
+}
+
+/* ---------- Tab Context Intelligence ---------- */
+var currentTabContext = 'pipeline';
+var _origSwitchTab = switchTab;
+switchTab = function(tab) {
+  _origSwitchTab(tab);
+  currentTabContext = tab;
+};
+
+// Patch sendToChat to include tab context
+var _origSendToChat = sendToChat;
+sendToChat = async function(text) {
+  const contextHints = {
+    pipeline: '[Context: User is browsing the pipeline of job offers]',
+    tracker: '[Context: User is managing tracked applications]',
+    interview: '[Context: User is in interview preparation mode]',
+    crm: '[Context: User is managing CRM contacts]',
+    comp: '[Context: User is reviewing compensation data]',
+    brand: '[Context: User is working on personal brand]',
+    analytics: '[Context: User is reviewing analytics]',
+    research: '[Context: User is researching a company]',
+  };
+  const hint = contextHints[currentTabContext];
+  const augmented = hint ? text + '\n\n' + hint : text;
+  return _origSendToChat(augmented);
+};
 
 /* ---------- Init ---------- */
 loadData();

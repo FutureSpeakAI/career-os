@@ -2177,6 +2177,536 @@ Be concise. Be actionable. When asked to do something, use your tools immediatel
 });
 
 // ---------------------------------------------------------------------------
+// API Routes -- Morning Briefing
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/briefing -- Daily morning briefing with pipeline summary,
+ * overdue follow-ups, action items, recommendations, and smart suggestion.
+ */
+app.get('/api/briefing', (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Pipeline data
+    const pipelineContent = readSafe(PATHS.pipeline);
+    const pipelineEntries = parsePipeline(pipelineContent);
+    const cSuite = pipelineEntries.filter(e => {
+      const title = (e.title || e.role || '').toLowerCase();
+      return /\b(vp|vice president|chief|caio|cto|cio|coo|ceo|svp|evp|president)\b/.test(title);
+    }).length;
+    const director = pipelineEntries.filter(e => {
+      const title = (e.title || e.role || '').toLowerCase();
+      return /\b(director|head of|principal)\b/.test(title) && !/\b(vp|vice president|chief|caio|cto|cio|coo|ceo|svp|evp|president)\b/.test(title);
+    }).length;
+
+    // Count offers added in the last 24 hours (approximate by checking scan history)
+    const scanContent = readSafe(PATHS.scanHistory);
+    const scanRows = parseScanHistory(scanContent);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const new24h = scanRows.filter(r => r.date >= yesterday).length;
+
+    // Stale pipeline entries: calculate days since newest entry
+    const staleDays = scanRows.length > 0
+      ? Math.max(0, Math.round((Date.now() - new Date(scanRows[scanRows.length - 1].date || today).getTime()) / 86400000))
+      : 7;
+
+    // 2. Tracker data
+    const trackerContent = readSafe(PATHS.tracker);
+    const trackerRows = parseTracker(trackerContent);
+
+    // Overdue follow-ups: Applied > 5 days ago
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0];
+    const overdueFollowUps = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'applied' && r.date && r.date <= fiveDaysAgo;
+    }).map(r => ({
+      company: r.company,
+      role: r.role,
+      date: r.date,
+      daysAgo: Math.round((Date.now() - new Date(r.date).getTime()) / 86400000),
+    }));
+
+    // Upcoming interviews
+    const upcomingInterviews = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'interview';
+    }).map(r => ({
+      company: r.company,
+      role: r.role,
+      date: r.date,
+    }));
+
+    // Recent activity (last 5 tracker entries by date)
+    const recentActivity = trackerRows
+      .filter(r => r.date)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, 5)
+      .map(r => ({
+        company: r.company,
+        role: r.role,
+        status: r.status,
+        date: r.date,
+      }));
+
+    // 3. Agent memory (action items)
+    const memoryPath = join(ROOT, 'data', 'agent-memory.json');
+    let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+    try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+    const actionItems = (memories.actionItems || []).filter(a => a.status === 'pending').map(a => ({
+      action: a.action || '',
+      date: a.date || '',
+      status: a.status || 'pending',
+    }));
+
+    // 4. Scan history -- last scan date
+    const sortedScans = scanRows.filter(r => r.date).sort((a, b) => b.date.localeCompare(a.date));
+    const lastScan = sortedScans.length > 0 ? sortedScans[0].date : null;
+    const daysSinceLastScan = lastScan
+      ? Math.round((Date.now() - new Date(lastScan).getTime()) / 86400000)
+      : null;
+
+    // 5. Recommendations (reuse logic from /api/recommendations)
+    const recommendations = [];
+    const highScoreUnapplied = trackerRows
+      .filter(r => {
+        const score = parseFloat(r.score) || 0;
+        const status = (r.status || '').toLowerCase();
+        return score >= 4.0 && status === 'evaluated';
+      })
+      .sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0))
+      .slice(0, 3);
+    for (const r of highScoreUnapplied) {
+      recommendations.push({
+        company: r.company, title: r.role,
+        reason: `Score ${r.score} -- strong fit, not yet applied`,
+        urgency: 'high',
+      });
+    }
+    const csuiteInPipeline = pipelineEntries
+      .filter(e => {
+        const title = (e.title || e.role || '').toLowerCase();
+        return /\b(vp|chief|caio|cto|cio)\b/.test(title) && !e.done;
+      })
+      .slice(0, 3);
+    for (const e of csuiteInPipeline) {
+      recommendations.push({
+        company: e.company || 'Unknown', title: e.title || e.role || 'C-Suite Role',
+        reason: 'C-suite pipeline entry awaiting evaluation',
+        urgency: 'medium',
+      });
+    }
+
+    // 6. Dynamic suggestion
+    const profileContent = readSafe(PATHS.profile);
+    const profileFlat = parseSimpleYaml(profileContent);
+    const firstName = (profileFlat['candidate.full_name'] || 'there').split(' ')[0];
+    const hour = new Date().getHours();
+    const greetingTime = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const greeting = `${greetingTime}, ${firstName}.`;
+
+    let suggestion = '';
+    if (upcomingInterviews.length > 0) {
+      const next = upcomingInterviews[0];
+      suggestion = `Prep for your ${next.company} interview${next.date ? ' (' + next.date + ')' : ''}. Review your STAR stories and company research.`;
+    } else if (overdueFollowUps.length > 0) {
+      suggestion = `You have ${overdueFollowUps.length} follow-up${overdueFollowUps.length > 1 ? 's' : ''} overdue. Send a brief check-in to keep the conversation alive.`;
+    } else if (trackerRows.length === 0 && pipelineEntries.length > 0) {
+      suggestion = `You have ${pipelineEntries.length.toLocaleString()} offers in pipeline but 0 applications. Focus on evaluating the top VP/CAIO roles this week.`;
+    } else if (trackerRows.length > 0 && overdueFollowUps.length === 0) {
+      suggestion = `Strong start -- keep the momentum. Consider evaluating ${Math.min(5, csuiteInPipeline.length)} more C-suite roles from your pipeline.`;
+    } else {
+      suggestion = `Your pipeline has ${pipelineEntries.length.toLocaleString()} offers. Run a scan to discover new roles, then evaluate the top matches.`;
+    }
+
+    res.json({
+      date: today,
+      greeting,
+      pipeline: {
+        total: pipelineEntries.length,
+        cSuite,
+        director,
+        new24h,
+        staleDays,
+      },
+      tracker: {
+        total: trackerRows.length,
+        overdueFollowUps,
+        upcomingInterviews,
+        recentActivity,
+      },
+      actionItems,
+      recommendations,
+      lastScan,
+      daysSinceLastScan,
+      suggestion,
+    });
+  } catch (err) {
+    log('ERROR', `GET /api/briefing: ${err.message}`);
+    res.status(500).json({ error: 'Briefing generation failed', detail: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API Routes -- Workflow Chains
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/workflow/full-pipeline -- Scan, evaluate top N, generate materials for best.
+ * Body: { count: 5 }
+ */
+app.post('/api/workflow/full-pipeline', async (req, res) => {
+  try {
+    const count = Math.min(parseInt(req.body.count) || 5, 10);
+    const base = `http://localhost:${PORT}`;
+
+    // Step 1: Scan
+    log('INFO', `[Workflow] Full pipeline: scanning portals...`);
+    let scanned = { found: 0, added: 0 };
+    try {
+      const scanRes = await fetch(`${base}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      scanned = await scanRes.json();
+    } catch (e) {
+      log('WARN', `[Workflow] Scan failed: ${e.message}`);
+    }
+
+    // Step 2: Read pipeline and pick top N by tier
+    const pipelineContent = readSafe(PATHS.pipeline);
+    const entries = parsePipeline(pipelineContent).filter(e => !e.done);
+    const sorted = entries.sort((a, b) => {
+      const tierOrder = { 'c-suite': 0, 'director': 1, 'other': 2 };
+      const ta = a.tier || (classifyTierServer(a.title || a.role || '') );
+      const tb = b.tier || (classifyTierServer(b.title || b.role || '') );
+      return (tierOrder[ta] || 2) - (tierOrder[tb] || 2);
+    });
+    const topN = sorted.slice(0, count);
+
+    // Step 3: Evaluate each
+    log('INFO', `[Workflow] Evaluating top ${topN.length} offers...`);
+    const evaluated = [];
+    for (const entry of topN) {
+      try {
+        const evalRes = await fetch(`${base}/api/evaluate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: entry.url || '', text: `${entry.company} - ${entry.title || entry.role}` }),
+        });
+        const evalData = await evalRes.json();
+        evaluated.push({
+          company: entry.company || 'Unknown',
+          role: entry.title || entry.role || 'Unknown',
+          score: evalData.score || 0,
+          summary: evalData.summary || '',
+        });
+      } catch (e) {
+        log('WARN', `[Workflow] Evaluate failed for ${entry.company}: ${e.message}`);
+        evaluated.push({ company: entry.company || 'Unknown', role: entry.title || entry.role || '', score: 0, summary: 'Evaluation failed' });
+      }
+    }
+
+    // Step 4: Generate materials for top 3 by score
+    log('INFO', `[Workflow] Generating materials for top 3 by score...`);
+    const topByScore = [...evaluated].sort((a, b) => b.score - a.score).slice(0, 3);
+    const materials = [];
+    for (const entry of topByScore) {
+      if (entry.score < 2.0) continue;
+      try {
+        const resumeRes = await fetch(`${base}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'resume', context: `${entry.company} - ${entry.role}` }),
+        });
+        const resumeData = await resumeRes.json();
+        const coverRes = await fetch(`${base}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'cover-letter', context: `${entry.company} - ${entry.role}` }),
+        });
+        const coverData = await coverRes.json();
+        materials.push({
+          company: entry.company,
+          role: entry.role,
+          resume: resumeData.content || '',
+          coverLetter: coverData.content || '',
+        });
+      } catch (e) {
+        log('WARN', `[Workflow] Material generation failed for ${entry.company}: ${e.message}`);
+      }
+    }
+
+    log('INFO', `[Workflow] Full pipeline complete: scanned=${scanned.found}, evaluated=${evaluated.length}, materials=${materials.length}`);
+    res.json({ scanned, evaluated, materials });
+  } catch (err) {
+    log('ERROR', `POST /api/workflow/full-pipeline: ${err.message}`);
+    res.status(500).json({ error: 'Full pipeline workflow failed', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/workflow/interview-prep -- Complete interview prep package.
+ * Body: { company: string, role: string }
+ */
+app.post('/api/workflow/interview-prep', async (req, res) => {
+  try {
+    const { company, role } = req.body;
+    if (!company) return res.status(400).json({ error: 'Company name is required' });
+
+    const base = `http://localhost:${PORT}`;
+
+    // Step 1: Research company
+    log('INFO', `[Workflow] Interview prep: researching ${company}...`);
+    let research = {};
+    try {
+      const researchRes = await fetch(`${base}/api/research`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company }),
+      });
+      research = await researchRes.json();
+    } catch (e) {
+      log('WARN', `[Workflow] Research failed: ${e.message}`);
+    }
+
+    // Step 2: Generate interview prep
+    log('INFO', `[Workflow] Generating interview prep for ${company}...`);
+    let prepContent = '';
+    try {
+      const prepRes = await fetch(`${base}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'interview-prep', context: `${company} - ${role || 'Unknown Role'}` }),
+      });
+      const prepData = await prepRes.json();
+      prepContent = prepData.content || '';
+    } catch (e) {
+      log('WARN', `[Workflow] Prep generation failed: ${e.message}`);
+    }
+
+    // Step 3: Pull relevant STAR stories
+    const storyContent = readSafe(PATHS.storyBank);
+    const storySections = parseMdSections(storyContent);
+    const stories = storySections.filter(s => s.level === 2).map(s => ({
+      title: s.title,
+      body: s.body.substring(0, 300),
+    }));
+
+    res.json({
+      company,
+      role: role || '',
+      research,
+      prepContent,
+      stories,
+    });
+  } catch (err) {
+    log('ERROR', `POST /api/workflow/interview-prep: ${err.message}`);
+    res.status(500).json({ error: 'Interview prep workflow failed', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/workflow/follow-up-batch -- Generate follow-up drafts for overdue applications.
+ */
+app.post('/api/workflow/follow-up-batch', async (req, res) => {
+  try {
+    const base = `http://localhost:${PORT}`;
+    const trackerContent = readSafe(PATHS.tracker);
+    const trackerRows = parseTracker(trackerContent);
+
+    // Find overdue: Applied > 5 days ago
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0];
+    const overdue = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'applied' && r.date && r.date <= fiveDaysAgo;
+    });
+
+    if (overdue.length === 0) {
+      return res.json({ drafts: [], message: 'No overdue follow-ups found.' });
+    }
+
+    log('INFO', `[Workflow] Generating follow-up drafts for ${overdue.length} overdue applications...`);
+    const drafts = [];
+    for (const app of overdue.slice(0, 10)) { // Cap at 10
+      try {
+        const daysAgo = Math.round((Date.now() - new Date(app.date).getTime()) / 86400000);
+        const genRes = await fetch(`${base}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'email-draft',
+            context: `Follow-up email for ${app.company} - ${app.role}. Applied ${daysAgo} days ago on ${app.date}. Brief, professional check-in to express continued interest.`,
+          }),
+        });
+        const genData = await genRes.json();
+        drafts.push({
+          company: app.company,
+          role: app.role,
+          date: app.date,
+          daysAgo,
+          draft: genData.content || '',
+        });
+      } catch (e) {
+        log('WARN', `[Workflow] Follow-up draft failed for ${app.company}: ${e.message}`);
+      }
+    }
+
+    res.json({ drafts, count: drafts.length });
+  } catch (err) {
+    log('ERROR', `POST /api/workflow/follow-up-batch: ${err.message}`);
+    res.status(500).json({ error: 'Follow-up batch failed', detail: err.message });
+  }
+});
+
+// Helper for server-side tier classification (mirrors frontend classifyTier)
+function classifyTierServer(role) {
+  const r = (role || '').toLowerCase();
+  if (/\b(vp|vice president|c-suite|chief|cto|cio|coo|ceo|caio|cmo|svp|evp|president)\b/.test(r)) return 'c-suite';
+  if (/\b(director|head of|principal)\b/.test(r)) return 'director';
+  return 'other';
+}
+
+// ---------------------------------------------------------------------------
+// API Routes -- Proactive Notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/notifications -- Returns active notifications based on system state.
+ */
+app.get('/api/notifications', (req, res) => {
+  try {
+    const notifications = [];
+    let nextId = 1;
+
+    const trackerContent = readSafe(PATHS.tracker);
+    const trackerRows = parseTracker(trackerContent);
+    const pipelineContent = readSafe(PATHS.pipeline);
+    const pipelineEntries = parsePipeline(pipelineContent);
+    const scanContent = readSafe(PATHS.scanHistory);
+    const scanRows = parseScanHistory(scanContent);
+
+    // 1. Overdue follow-ups (Applied > 5 days ago)
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0];
+    const overdueApps = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'applied' && r.date && r.date <= fiveDaysAgo;
+    });
+    for (const app of overdueApps) {
+      const daysAgo = Math.round((Date.now() - new Date(app.date).getTime()) / 86400000);
+      notifications.push({
+        id: String(nextId++),
+        type: 'overdue',
+        severity: 'warning',
+        title: 'Follow-up overdue',
+        body: `${app.company} application is ${daysAgo} days old`,
+        action: 'draft_email',
+        actionData: { company: app.company, role: app.role },
+      });
+    }
+
+    // 2. Stale pipeline offers (> 7 days old unverified)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const staleCount = pipelineEntries.filter(e => !e.done && !e.verified).length;
+    const sortedScans = scanRows.filter(r => r.date).sort((a, b) => b.date.localeCompare(a.date));
+    const lastScanDate = sortedScans.length > 0 ? sortedScans[0].date : null;
+    if (staleCount > 20 && lastScanDate && lastScanDate <= sevenDaysAgo) {
+      notifications.push({
+        id: String(nextId++),
+        type: 'stale',
+        severity: 'info',
+        title: 'Listings aging',
+        body: `${staleCount} pipeline offers are 7+ days old and unverified`,
+        action: 'verify_all',
+        actionData: {},
+      });
+    }
+
+    // 3. No scan in 3+ days
+    if (!lastScanDate || lastScanDate <= new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0]) {
+      const daysSince = lastScanDate ? Math.round((Date.now() - new Date(lastScanDate).getTime()) / 86400000) : null;
+      notifications.push({
+        id: String(nextId++),
+        type: 'no_scan',
+        severity: 'info',
+        title: 'Time to scan',
+        body: daysSince ? `Last scan was ${daysSince} days ago` : 'No scans recorded yet',
+        action: 'run_scan',
+        actionData: {},
+      });
+    }
+
+    // 4. Pipeline offers but 0 applications
+    if (pipelineEntries.length > 0 && trackerRows.length === 0) {
+      notifications.push({
+        id: String(nextId++),
+        type: 'no_apps',
+        severity: 'info',
+        title: 'No applications yet',
+        body: `${pipelineEntries.length.toLocaleString()} offers in pipeline but none evaluated. Start with the top C-suite roles.`,
+        action: 'workflow_pipeline',
+        actionData: {},
+      });
+    }
+
+    // 5. Interview within 48 hours
+    const twoDaysFromNow = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcomingInterviews = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'interview';
+    });
+    for (const iv of upcomingInterviews) {
+      notifications.push({
+        id: String(nextId++),
+        type: 'interview_soon',
+        severity: 'warning',
+        title: 'Interview tracked',
+        body: `${iv.company} -- ${iv.role} is in interview stage. Ensure you are prepared.`,
+        action: 'interview_prep',
+        actionData: { company: iv.company, role: iv.role },
+      });
+    }
+
+    // 6. Pending action items from memory
+    const memoryPath = join(ROOT, 'data', 'agent-memory.json');
+    let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+    try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+    const pendingActions = (memories.actionItems || []).filter(a => a.status === 'pending');
+    if (pendingActions.length > 0) {
+      notifications.push({
+        id: String(nextId++),
+        type: 'action_pending',
+        severity: 'info',
+        title: `${pendingActions.length} pending action${pendingActions.length > 1 ? 's' : ''}`,
+        body: pendingActions.slice(0, 3).map(a => a.action).join('; '),
+        action: 'view_actions',
+        actionData: {},
+      });
+    }
+
+    // 7. Smart suggestion: high-score unapplied
+    const highScoreUnapplied = trackerRows.filter(r => {
+      const score = parseFloat(r.score) || 0;
+      return score >= 4.0 && (r.status || '').toLowerCase() === 'evaluated';
+    });
+    if (highScoreUnapplied.length > 0) {
+      notifications.push({
+        id: String(nextId++),
+        type: 'suggestion',
+        severity: 'info',
+        title: `${highScoreUnapplied.length} high-score role${highScoreUnapplied.length > 1 ? 's' : ''} unapplied`,
+        body: `${highScoreUnapplied[0].company} (${highScoreUnapplied[0].score}) and ${highScoreUnapplied.length - 1} more scored 4.0+ but have not been applied to`,
+        action: 'view_tracker',
+        actionData: {},
+      });
+    }
+
+    res.json({ notifications });
+  } catch (err) {
+    log('ERROR', `GET /api/notifications: ${err.message}`);
+    res.status(500).json({ error: 'Notifications failed', detail: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // SPA fallback -- send index.html for any unmatched GET request
 // ---------------------------------------------------------------------------
 
