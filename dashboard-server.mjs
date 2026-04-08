@@ -21,6 +21,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -202,7 +203,9 @@ async function executeToolCall(name, args) {
       case 'update_application_status': {
         // Find the application by company name
         const tracker = readSafe(PATHS.tracker);
-        const match = tracker.match(new RegExp(`^\\|\\s*(\\d+)\\s*\\|[^|]*\\|\\s*${args.company}`, 'mi'));
+        // Escape special regex characters in company name to prevent ReDoS
+        const escapedCompany = (args.company || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const match = tracker.match(new RegExp(`^\\|\\s*(\\d+)\\s*\\|[^|]*\\|\\s*${escapedCompany}`, 'mi'));
         if (match) {
           const res = await fetch(`${base}/api/tracker/${match[1]}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: args.status }) });
           return await res.json();
@@ -428,8 +431,9 @@ function parseYamlList(content, sectionKey) {
   for (const line of lines) {
     if (line.trim().startsWith('#') || line.trim() === '') continue;
 
-    // Check if we're entering the target section
-    const sectionMatch = line.match(new RegExp(`^(\\s*)${sectionKey}\\s*:`));
+    // Check if we're entering the target section (escape sectionKey for safe regex)
+    const escapedKey = sectionKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const sectionMatch = line.match(new RegExp(`^(\\s*)${escapedKey}\\s*:`));
     if (sectionMatch) {
       inSection = true;
       sectionIndent = sectionMatch[1].length;
@@ -689,8 +693,8 @@ function buildSystemInstruction() {
 
 const app = express();
 
-// Middleware
-app.use(express.json());
+// Middleware -- limit request body to 1MB to prevent abuse
+app.use(express.json({ limit: '1mb' }));
 
 // CORS for local dev
 app.use((req, res, next) => {
@@ -1712,6 +1716,13 @@ app.put('/api/file/:name', (req, res) => {
     if (content === undefined) {
       return res.status(400).json({ error: 'content is required' });
     }
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content must be a string' });
+    }
+    // Limit file content to 500KB to prevent abuse
+    if (content.length > 512 * 1024) {
+      return res.status(400).json({ error: 'Content too large. Maximum 500KB.' });
+    }
     writeFileSync(filePath, content, 'utf-8');
     log('INFO', `Updated file: ${name} (${filePath})`);
     res.json({ success: true, name, path: filePath });
@@ -1983,8 +1994,17 @@ app.patch('/api/memory/:index', (req, res) => {
   try {
     const memories = JSON.parse(readFileSync(memoryPath, 'utf-8'));
     const idx = parseInt(req.params.index);
+    if (isNaN(idx) || idx < 0) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
     if (memories.actionItems[idx]) {
-      Object.assign(memories.actionItems[idx], req.body);
+      // Whitelist allowed fields to prevent prototype pollution
+      const allowed = ['status', 'action', 'priority', 'date', 'notes'];
+      for (const key of allowed) {
+        if (req.body[key] !== undefined) {
+          memories.actionItems[idx][key] = req.body[key];
+        }
+      }
       writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
       res.json({ success: true });
     } else {
@@ -1995,31 +2015,37 @@ app.patch('/api/memory/:index', (req, res) => {
   }
 });
 
-// POST /api/conversation/save -- save conversation log
-app.post('/api/conversation/save', (req, res) => {
-  const { messages } = req.body;
-  const today = new Date().toISOString().split('T')[0];
-  const dir = join(ROOT, 'data', 'conversations');
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const filePath = join(dir, `${today}.json`);
+// POST /api/conversation/save -- save conversation log (async to avoid blocking)
+app.post('/api/conversation/save', async (req, res) => {
+  try {
+    const { messages } = req.body;
+    const today = new Date().toISOString().split('T')[0];
+    const dir = join(ROOT, 'data', 'conversations');
+    if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+    const filePath = join(dir, `${today}.json`);
 
-  // Append to existing day's conversation
-  let existing = [];
-  try { existing = JSON.parse(readFileSync(filePath, 'utf-8')); } catch {}
-  existing.push(...messages);
+    // Append to existing day's conversation
+    let existing = [];
+    try { existing = JSON.parse(await readFile(filePath, 'utf-8')); } catch {}
+    existing.push(...messages);
 
-  writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
-  res.json({ success: true, count: existing.length });
+    await writeFile(filePath, JSON.stringify(existing, null, 2), 'utf-8');
+    res.json({ success: true, count: existing.length });
+  } catch (err) {
+    log('ERROR', `POST /api/conversation/save: ${err.message}`);
+    res.status(500).json({ error: 'Failed to save conversation', detail: err.message });
+  }
 });
 
-// GET /api/conversation/latest -- get latest conversation
-app.get('/api/conversation/latest', (req, res) => {
+// GET /api/conversation/latest -- get latest conversation (async to avoid blocking)
+app.get('/api/conversation/latest', async (req, res) => {
   const dir = join(ROOT, 'data', 'conversations');
   if (!existsSync(dir)) return res.json({ messages: [] });
   const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort().reverse();
   if (!files.length) return res.json({ messages: [] });
   try {
-    const messages = JSON.parse(readFileSync(join(dir, files[0]), 'utf-8'));
+    const content = await readFile(join(dir, files[0]), 'utf-8');
+    const messages = JSON.parse(content);
     res.json({ date: files[0].replace('.json', ''), messages });
   } catch {
     res.json({ messages: [] });
@@ -2430,4 +2456,17 @@ process.on('SIGINT', () => {
     log('INFO', 'Server closed');
     process.exit(0);
   });
+});
+
+// Catch unhandled errors to prevent silent crashes
+process.on('unhandledRejection', (reason) => {
+  log('ERROR', `Unhandled promise rejection: ${reason}`);
+});
+
+process.on('uncaughtException', (err) => {
+  log('ERROR', `Uncaught exception: ${err.message}\n${err.stack}`);
+  // Allow existing connections to finish, then exit
+  server.close(() => process.exit(1));
+  // Force exit after 5 seconds if graceful shutdown stalls
+  setTimeout(() => process.exit(1), 5000).unref();
 });

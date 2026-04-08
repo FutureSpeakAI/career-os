@@ -141,8 +141,10 @@ This system is designed to be customized by YOU (Claude). When the user asks you
 
 ## Stack and Conventions
 
-- Node.js (mjs modules), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data)
+- Node.js (mjs modules), Express 5 (server), WebSocket/ws (Gemini proxy), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data)
 - Scripts in `.mjs`, configuration in YAML
+- Dashboard server: `dashboard-server.mjs` (Express + WS, 34 API routes, Gemini Live voice proxy, Claude chat with tool use)
+- Tests: `__tests__/*.test.mjs` via `node --test` (no external test framework)
 - Output in `output/` (gitignored), Reports in `reports/`
 - JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md)
 - Batch in `batch/` (gitignored except scripts and prompt)
