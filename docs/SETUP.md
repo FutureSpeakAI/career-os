@@ -105,7 +105,10 @@ Key fields:
 ```bash
 npm run sync-check     # Validate configuration
 npm run verify         # Check pipeline integrity
-npm test               # Run test suite
+npm test               # Run full test suite (184 tests across 7 files)
+npm run test:unit      # Unit tests only (parsers, intelligence)
+npm run test:integration  # Integration tests (HTTP endpoints, lib modules)
+npm run test:scripts   # Script tests (merge, normalize, verify)
 ```
 
 ## Attribution

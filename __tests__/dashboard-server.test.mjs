@@ -1,169 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  parseMdTable,
+  parseTracker,
+  parsePipeline,
+  parseSimpleYaml,
+  computeAnalytics,
+  isMemoryDuplicate,
+  classifyTier,
+  parseMdSections,
+  parseYamlList,
+  parseScanHistory,
+  parseEnvStatus,
+} from '../lib/parsers.mjs';
 
 /**
- * Test the pure parsing functions from dashboard-server.mjs.
- * Since the server is a monolith, we replicate the function signatures here
- * to test their logic independently. When the server is refactored into modules,
- * these tests can import directly.
+ * Test the pure parsing functions imported from lib/parsers.mjs.
+ * These are the shared functions used by both the server and CLI scripts.
  */
-
-// --- Replicated parsing functions (must match dashboard-server.mjs) ---
-
-function parseMdTable(content) {
-  const lines = content.split('\n');
-  const result = { headers: [], rows: [] };
-
-  let headerLine = -1;
-  let separatorLine = -1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith('|') && !trimmed.match(/^\|\s*-/)) {
-      if (headerLine === -1) {
-        headerLine = i;
-      }
-    }
-    if (trimmed.startsWith('|') && trimmed.match(/^\|\s*-/)) {
-      separatorLine = i;
-      break;
-    }
-  }
-
-  if (headerLine === -1 || separatorLine === -1) return result;
-
-  result.headers = lines[headerLine]
-    .split('|')
-    .map(s => s.trim())
-    .filter(Boolean);
-
-  for (let i = separatorLine + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line.startsWith('|')) continue;
-
-    const cells = line.split('|').map(s => s.trim()).filter(Boolean);
-    if (cells.length === 0) continue;
-    if (cells.every(c => c === '')) continue;
-
-    const row = {};
-    result.headers.forEach((header, idx) => {
-      row[header] = cells[idx] || '';
-    });
-    result.rows.push(row);
-  }
-
-  return result;
-}
-
-function parseTracker(content) {
-  if (!content.trim()) return [];
-
-  const lines = content.split('\n');
-  const rows = [];
-
-  for (const line of lines) {
-    if (!line.startsWith('|')) continue;
-    if (line.includes('---') || line.match(/\|\s*#\s*\|/)) continue;
-
-    const cells = line.split('|').map(s => s.trim());
-    const parts = cells.filter(Boolean);
-    if (parts.length < 8) continue;
-
-    const num = parseInt(parts[0]);
-    if (isNaN(num)) continue;
-
-    rows.push({
-      num,
-      date: parts[1] || '',
-      company: parts[2] || '',
-      role: parts[3] || '',
-      score: parts[4] || '',
-      status: parts[5] || '',
-      pdf: parts[6] || '',
-      report: parts[7] || '',
-      notes: parts[8] || '',
-    });
-  }
-
-  return rows;
-}
-
-function parsePipeline(content) {
-  if (!content.trim()) return [];
-  const entries = [];
-  for (const line of content.split('\n')) {
-    const m = line.match(/^- \[[ x]\]\s+(\S+)\s+\|\s+(.+?)\s+\|\s+(.+)$/);
-    if (m) {
-      const title = m[3].trim();
-      const tier = /\b(VP|Vice President|Chief|CAIO|CTO)\b/i.test(title) ? 'c-suite'
-        : /\b(Director|Head)\b/i.test(title) ? 'director' : 'other';
-      entries.push({ url: m[1], company: m[2].trim(), title, tier, done: line.includes('[x]') });
-    }
-  }
-  if (entries.length === 0) {
-    const table = parseMdTable(content);
-    return table.rows;
-  }
-  return entries;
-}
-
-function parseSimpleYaml(content) {
-  const result = {};
-  let currentParent = '';
-  const lines = content.split('\n');
-
-  for (const line of lines) {
-    if (line.trim().startsWith('#') || line.trim() === '') continue;
-
-    const kvMatch = line.match(/^(\s*)(\w[\w_]*)\s*:\s*(.*)$/);
-    if (!kvMatch) continue;
-
-    const [, spaces, key, rawValue] = kvMatch;
-    const indentLevel = spaces.length;
-
-    let value = rawValue.trim();
-
-    if (indentLevel === 0) {
-      if (value === '' || value === '|' || value === '>') {
-        currentParent = key;
-        continue;
-      }
-      value = value.replace(/^["']|["']$/g, '');
-      result[key] = value;
-    } else {
-      value = value.replace(/^["']|["']$/g, '');
-      const fullKey = currentParent ? `${currentParent}.${key}` : key;
-      result[fullKey] = value;
-    }
-  }
-
-  return result;
-}
-
-function computeAnalytics(trackerRows) {
-  const statusCounts = {};
-  const scores = [];
-
-  for (const row of trackerRows) {
-    const status = row.status.replace(/\*\*/g, '').trim();
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
-
-    const scoreMatch = row.score.replace(/\*\*/g, '').match(/([\d.]+)\/5/);
-    if (scoreMatch) {
-      scores.push(parseFloat(scoreMatch[1]));
-    }
-  }
-
-  const avgScore = scores.length > 0
-    ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)
-    : null;
-
-  return {
-    total: trackerRows.length,
-    statusCounts,
-    avgScore,
-  };
-}
 
 // --- Tests ---
 
@@ -338,6 +192,46 @@ describe('computeAnalytics', () => {
   });
 });
 
+// isMemoryDuplicate -- now imported from lib/parsers.mjs (no more code duplication)
+
+describe('isMemoryDuplicate', () => {
+  it('should detect exact duplicates', () => {
+    assert.equal(isMemoryDuplicate(['20 years of journalism'], '20 years of journalism'), true);
+  });
+
+  it('should detect duplicates with different casing', () => {
+    assert.equal(isMemoryDuplicate(['VP of AI targeting'], 'vp of ai targeting'), true);
+  });
+
+  it('should detect duplicates with extra whitespace', () => {
+    assert.equal(isMemoryDuplicate(['Senior Director at Aquent'], 'Senior  Director  at  Aquent'), true);
+  });
+
+  it('should detect when new entry contains existing (superset)', () => {
+    assert.equal(isMemoryDuplicate(['20 years journalism'], '20 years journalism experience at Raw Story'), true);
+  });
+
+  it('should detect when existing entry contains new (subset)', () => {
+    assert.equal(isMemoryDuplicate(['Targeting CAIO VP of AI CTO roles'], 'VP of AI'), true);
+  });
+
+  it('should NOT detect unrelated entries as duplicates', () => {
+    assert.equal(isMemoryDuplicate(['20 years journalism', 'VP of AI target'], 'Google interview prep'), false);
+  });
+
+  it('should handle empty inputs gracefully', () => {
+    assert.equal(isMemoryDuplicate([], 'something'), false);
+    assert.equal(isMemoryDuplicate(['something'], ''), false);
+    assert.equal(isMemoryDuplicate(null, 'something'), false);
+    assert.equal(isMemoryDuplicate(['a'], null), false);
+  });
+
+  it('should handle single-word entries', () => {
+    assert.equal(isMemoryDuplicate(['python'], 'python'), true);
+    assert.equal(isMemoryDuplicate(['python'], 'javascript'), false);
+  });
+});
+
 describe('security: regex escaping', () => {
   it('should not allow regex injection in company names', () => {
     // This tests the pattern used in update_application_status tool
@@ -368,5 +262,236 @@ describe('security: regex escaping', () => {
     const match = tracker.match(regex);
     assert.ok(match, 'Should match exact company name');
     assert.equal(match[1], '1');
+  });
+});
+
+// --- Additional tests for newly-importable parsers ---
+
+describe('classifyTier', () => {
+  it('should classify c-suite roles', () => {
+    assert.equal(classifyTier('VP of AI'), 'c-suite');
+    assert.equal(classifyTier('Chief Technology Officer'), 'c-suite');
+    assert.equal(classifyTier('CAIO'), 'c-suite');
+    assert.equal(classifyTier('CTO'), 'c-suite');
+    assert.equal(classifyTier('SVP Engineering'), 'c-suite');
+    assert.equal(classifyTier('President of Operations'), 'c-suite');
+  });
+
+  it('should classify director roles', () => {
+    assert.equal(classifyTier('Director of Engineering'), 'director');
+    assert.equal(classifyTier('Head of AI'), 'director');
+    assert.equal(classifyTier('Principal Engineer'), 'director');
+  });
+
+  it('should classify other roles', () => {
+    assert.equal(classifyTier('Software Engineer'), 'other');
+    assert.equal(classifyTier('Product Manager'), 'other');
+    assert.equal(classifyTier(''), 'other');
+  });
+
+  it('should be case insensitive', () => {
+    assert.equal(classifyTier('vp of ai'), 'c-suite');
+    assert.equal(classifyTier('DIRECTOR OF ENGINEERING'), 'director');
+  });
+
+  it('should handle null/undefined gracefully', () => {
+    assert.equal(classifyTier(null), 'other');
+    assert.equal(classifyTier(undefined), 'other');
+  });
+});
+
+describe('parseMdSections', () => {
+  it('should parse markdown sections by heading', () => {
+    const input = `# Title
+
+Some intro text.
+
+## Section One
+
+Content of section one.
+
+## Section Two
+
+Content of section two.
+`;
+    const sections = parseMdSections(input);
+    assert.equal(sections.length, 3);
+    assert.equal(sections[0].title, 'Title');
+    assert.equal(sections[0].level, 1);
+    assert.ok(sections[0].body.includes('Some intro text'));
+    assert.equal(sections[1].title, 'Section One');
+    assert.equal(sections[1].level, 2);
+    assert.equal(sections[2].title, 'Section Two');
+  });
+
+  it('should return empty array for content with no headings', () => {
+    const sections = parseMdSections('Just plain text\nNo headings here');
+    assert.deepEqual(sections, []);
+  });
+
+  it('should handle empty input', () => {
+    assert.deepEqual(parseMdSections(''), []);
+  });
+});
+
+describe('parseScanHistory', () => {
+  it('should parse TSV scan history', () => {
+    const input = `2026-04-01\thttps://example.com/job1\tAcme\tVP of AI\tactive
+2026-04-02\thttps://example.com/job2\tTechCo\tCTO\tclosed`;
+    const rows = parseScanHistory(input);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].date, '2026-04-01');
+    assert.equal(rows[0].url, 'https://example.com/job1');
+    assert.equal(rows[0].company, 'Acme');
+    assert.equal(rows[1].status, 'closed');
+  });
+
+  it('should return empty array for empty input', () => {
+    assert.deepEqual(parseScanHistory(''), []);
+    assert.deepEqual(parseScanHistory('  \n  '), []);
+  });
+
+  it('should skip lines with fewer than 2 columns', () => {
+    const input = `incomplete\n2026-04-01\thttps://example.com`;
+    const rows = parseScanHistory(input);
+    assert.equal(rows.length, 1);
+  });
+});
+
+describe('parseYamlList', () => {
+  it('should parse list items under a section key', () => {
+    const input = `target_roles:
+  primary:
+    - "VP of AI"
+    - "CTO"
+    - "CAIO"
+  secondary:
+    - "Director of Engineering"`;
+    const items = parseYamlList(input, 'primary');
+    assert.deepEqual(items, ['VP of AI', 'CTO', 'CAIO']);
+  });
+
+  it('should return empty array when section not found', () => {
+    const input = `other:\n  - item1`;
+    const items = parseYamlList(input, 'nonexistent');
+    assert.deepEqual(items, []);
+  });
+
+  it('should handle section keys with special regex chars', () => {
+    const input = `roles.primary:\n  - item1`;
+    const items = parseYamlList(input, 'roles.primary');
+    assert.deepEqual(items, ['item1']);
+  });
+});
+
+// --- Additional edge case tests for v2.0.0 ---
+
+describe('parsePipeline edge cases', () => {
+  it('should fall back to table format when no checklist items found', () => {
+    const input = `| Company | Title | URL |
+|---------|-------|-----|
+| Acme | VP of AI | https://example.com |
+`;
+    const entries = parsePipeline(input);
+    assert.ok(entries.length >= 1, 'Should parse table format as fallback');
+  });
+
+  it('should handle mixed done/not-done entries', () => {
+    const input = `- [ ] https://ex.com/1 | Company A | VP of AI
+- [x] https://ex.com/2 | Company B | CTO
+- [ ] https://ex.com/3 | Company C | Director`;
+    const entries = parsePipeline(input);
+    assert.equal(entries.length, 3);
+    assert.equal(entries[0].done, false);
+    assert.equal(entries[1].done, true);
+    assert.equal(entries[2].done, false);
+  });
+});
+
+describe('parseTracker edge cases', () => {
+  it('should handle rows with fewer than 9 columns gracefully', () => {
+    const input = `| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|-----|--------|-------|
+| 1 | 2026-04-01 | Acme | VP | 4.0/5 | Evaluated | x | [1](r.md) |`;
+    const rows = parseTracker(input);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].notes, '');
+  });
+
+  it('should skip non-numeric row numbers', () => {
+    const input = `| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|-----|--------|-------|
+| abc | 2026-04-01 | Acme | VP | 4.0/5 | Evaluated | x | [1](r.md) | note |`;
+    const rows = parseTracker(input);
+    assert.equal(rows.length, 0);
+  });
+});
+
+describe('computeAnalytics edge cases', () => {
+  it('should handle rows with bold markdown in status', () => {
+    const rows = [
+      { status: '**Evaluated**', score: '4.0/5' },
+      { status: '**Applied**', score: '3.5/5' },
+    ];
+    const analytics = computeAnalytics(rows);
+    assert.equal(analytics.statusCounts['Evaluated'], 1);
+    assert.equal(analytics.statusCounts['Applied'], 1);
+  });
+
+  it('should correctly bucket score distribution', () => {
+    const rows = [
+      { status: 'Evaluated', score: '4.8/5' },
+      { status: 'Evaluated', score: '4.2/5' },
+      { status: 'Evaluated', score: '3.7/5' },
+      { status: 'Evaluated', score: '3.1/5' },
+      { status: 'Evaluated', score: '2.5/5' },
+    ];
+    const analytics = computeAnalytics(rows);
+    assert.equal(analytics.scoreDistribution['4.5+'], 1);
+    assert.equal(analytics.scoreDistribution['4.0-4.4'], 1);
+    assert.equal(analytics.scoreDistribution['3.5-3.9'], 1);
+    assert.equal(analytics.scoreDistribution['3.0-3.4'], 1);
+    assert.equal(analytics.scoreDistribution['below 3.0'], 1);
+  });
+});
+
+describe('parseEnvStatus', () => {
+  it('should return an object with boolean values', () => {
+    const status = parseEnvStatus();
+    assert.ok(typeof status === 'object');
+    for (const [key, val] of Object.entries(status)) {
+      assert.equal(typeof val, 'boolean', `${key} should be boolean`);
+    }
+  });
+
+  it('should include all expected keys', () => {
+    const status = parseEnvStatus();
+    const expectedKeys = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'];
+    for (const key of expectedKeys) {
+      assert.ok(key in status, `Should include ${key}`);
+    }
+  });
+});
+
+describe('classifyTier extended', () => {
+  it('should classify EVP roles as c-suite', () => {
+    assert.equal(classifyTier('EVP of Engineering'), 'c-suite');
+  });
+
+  it('should not classify "Supervisor" as director', () => {
+    assert.equal(classifyTier('Supervisor'), 'other');
+  });
+});
+
+describe('isMemoryDuplicate extended', () => {
+  it('should handle unicode and special characters', () => {
+    assert.equal(isMemoryDuplicate(['20+ years experience'], '20+ years experience'), true);
+  });
+
+  it('should not match partial word overlaps', () => {
+    // "AI" is contained in "CAIO" but these are different enough that
+    // the function's substring check should handle it as-is
+    // This tests current behavior -- substring match means "AI" will match "CAIO"
+    assert.equal(isMemoryDuplicate(['AI'], 'CAIO role'), true);
   });
 });

@@ -52,7 +52,10 @@ Thanks for your interest in contributing! Career-OS is built with Claude Code, a
 
 ```bash
 npm run setup          # Install everything
-npm test               # Run test suite
+npm test               # Run full test suite (184 tests)
+npm run test:unit      # Unit tests only (fast, no server spawn)
+npm run test:integration  # Integration tests (spawns server)
+npm run test:scripts   # Script tests (merge, normalize, verify)
 npm run verify         # Pipeline health check
 npm run sync-check     # Config validation
 ```

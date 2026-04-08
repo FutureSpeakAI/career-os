@@ -1,7 +1,7 @@
 {
   "name": "career-os",
-  "version": "1.0.0",
-  "description": "AI-powered career advancement operating system built on Claude Code",
+  "version": "2.0.0",
+  "description": "AI-powered career advancement operating system built on Claude Code: pipeline tracking, offer evaluation, CV generation, voice AI coaching, and a 12-tab web dashboard",
   "scripts": {
     "setup": "node setup.mjs",
     "start": "node dashboard-server.mjs",
@@ -12,7 +12,10 @@
     "merge": "node merge-tracker.mjs",
     "pdf": "node generate-pdf.mjs",
     "sync-check": "node cv-sync-check.mjs",
-    "test": "node --test __tests__/*.test.mjs"
+    "test": "node --test __tests__/*.test.mjs",
+    "test:unit": "node --test __tests__/dashboard-server.test.mjs __tests__/intelligence.test.mjs",
+    "test:integration": "node --test __tests__/http-endpoints.test.mjs __tests__/lib-modules.test.mjs",
+    "test:scripts": "node --test __tests__/merge-tracker.test.mjs __tests__/normalize-statuses.test.mjs __tests__/verify-pipeline.test.mjs"
   },
   "keywords": [
     "ai",

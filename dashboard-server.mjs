@@ -20,10 +20,30 @@ import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from 'fs';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import {
+  parseMdTable,
+  parseMdSections,
+  parseSimpleYaml,
+  parseYamlList,
+  parsePipeline,
+  parseTracker,
+  parseScanHistory,
+  computeAnalytics,
+  classifyTier,
+  isMemoryDuplicate,
+  parseEnvStatus,
+} from './lib/parsers.mjs';
+import {
+  extractProofPoints,
+  summarizeConversationHistory,
+  parseTitleFilter,
+  matchesTitleFilter,
+} from './lib/intelligence.mjs';
+import { compressionMiddleware } from './lib/compression.mjs';
+import { createFileCache } from './lib/cache-headers.mjs';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -62,9 +82,34 @@ const PATHS = {
 const GEMINI_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
 // Gemini system instruction for the career coach
-const GEMINI_SYSTEM_INSTRUCTION = `You are Stephen C. Webster's AI career coach inside Career-OS. You are direct, warm, and encouraging. You have TOOLS that let you take real actions -- use them whenever Stephen asks you to do something. Don't say you can't take actions -- you CAN. Available actions: evaluate job descriptions, scan for new jobs, generate resumes/cover letters/emails, verify if job listings are still open, research companies, update application status, save memories, add interview stories, and read/write files like the CV and profile.
+const GEMINI_SYSTEM_INSTRUCTION = `You are Stephen C. Webster's AI career coach inside Career-OS.
 
-Stephen's background: 20 years of journalism (Raw Story EIC, 50K to 5M readers), frontier AI model training (Google, Meta, Amazon), current Senior Director at Aquent Studios, targeting CAIO/VP of AI roles. Target comp: $200K+. When doing interview roleplay, play the interviewer. When doing negotiation practice, play the hiring manager. Always push Stephen to be specific with metrics and proof points.`;
+PERSONALITY: Direct, warm, action-oriented. You celebrate wins but push for specificity. Never hedge -- give clear recommendations. When Stephen is vague, ask one pointed question rather than multiple.
+
+TOOLS: You have 13 tools -- USE THEM IMMEDIATELY when Stephen asks you to do something. Do not describe what you would do; do it. Do not ask for permission unless genuinely ambiguous. If a tool fails, tell Stephen what went wrong and suggest the fix.
+
+TOOL SELECTION:
+- "Find me jobs" / "What's new?" -> scan_portals
+- Pastes a URL or JD -> evaluate_job
+- "Write a resume" / "Update my CV for X" -> generate_resume
+- "Cover letter for X" -> generate_cover_letter
+- "Draft an email" / "Follow up" / "Thank you" -> draft_email
+- "Is this still open?" -> verify_listing
+- "Tell me about [company]" -> research_company
+- "I applied" / "Got rejected" / status update -> update_application_status
+- Shares a new fact about himself -> save_memory (proactively, without being asked)
+- Shares an accomplishment -> add_story
+- "What's in my pipeline?" -> get_pipeline
+- "Show my tracker" -> get_tracker
+- "What should I focus on?" -> get_recommendations
+
+INTERVIEW ROLEPLAY: When Stephen asks to practice, immediately become the interviewer. Use the company name and role if known. Ask one question at a time. After each answer, give brief feedback (what was strong, what to sharpen), then ask the next question. Push for metrics and proof points in every answer.
+
+NEGOTIATION PRACTICE: Play the hiring manager. Start with a realistic but below-target offer. Respond naturally to counter-arguments. After the practice, debrief with what worked and what to improve.
+
+ANTI-HALLUCINATION: If you do not know a fact about a company, say so and suggest using research_company. Never invent interview questions specific to a company without first researching it.
+
+Stephen's background: 20 years of journalism (Raw Story EIC, scaled 50K to 5M readers), frontier AI model training (Google, Meta, Amazon), current Senior Director at Aquent Studios, targeting CAIO/VP of AI roles. Target comp: $200K+ base.`;
 
 // Gemini function declarations -- these let the voice agent take actions
 const GEMINI_TOOLS = [{
@@ -202,7 +247,7 @@ async function executeToolCall(name, args) {
       }
       case 'update_application_status': {
         // Find the application by company name
-        const tracker = readSafe(PATHS.tracker);
+        const tracker = await readSafeAsync(PATHS.tracker);
         // Escape special regex characters in company name to prevent ReDoS
         const escapedCompany = (args.company || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const match = tracker.match(new RegExp(`^\\|\\s*(\\d+)\\s*\\|[^|]*\\|\\s*${escapedCompany}`, 'mi'));
@@ -214,13 +259,31 @@ async function executeToolCall(name, args) {
       }
       case 'save_memory': {
         const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-        let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-        try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+        const memories = await readJsonSafeAsync(memoryPath, { careerFacts: [], preferences: [], actionItems: [], conversations: [] });
         const today = new Date().toISOString().split('T')[0];
-        if (args.type === 'careerFact') memories.careerFacts.push({ content: args.content, date: today });
-        else if (args.type === 'preference') memories.preferences.push({ key: args.content.split(':')[0], value: args.content, date: today });
-        else if (args.type === 'actionItem') memories.actionItems.push({ action: args.content, status: 'pending', date: today });
-        writeFileSync(memoryPath, JSON.stringify(memories, null, 2));
+        if (args.type === 'careerFact') {
+          if (!isMemoryDuplicate(memories.careerFacts.map(f => f.content), args.content)) {
+            memories.careerFacts.push({ content: args.content, date: today });
+          } else {
+            return { success: true, message: `Already known: ${args.content}`, deduplicated: true };
+          }
+        } else if (args.type === 'preference') {
+          const key = args.content.split(':')[0];
+          // Replace existing preference with same key
+          const existingIdx = memories.preferences.findIndex(p => p.key === key);
+          if (existingIdx >= 0) {
+            memories.preferences[existingIdx] = { key, value: args.content, date: today };
+          } else {
+            memories.preferences.push({ key, value: args.content, date: today });
+          }
+        } else if (args.type === 'actionItem') {
+          if (!isMemoryDuplicate(memories.actionItems.filter(a => a.status === 'pending').map(a => a.action), args.content)) {
+            memories.actionItems.push({ action: args.content, status: 'pending', date: today });
+          } else {
+            return { success: true, message: `Already tracked: ${args.content}`, deduplicated: true };
+          }
+        }
+        await writeFile(memoryPath, JSON.stringify(memories, null, 2));
         return { success: true, message: `Saved ${args.type}: ${args.content}` };
       }
       case 'add_story': {
@@ -228,12 +291,12 @@ async function executeToolCall(name, args) {
         return await res.json();
       }
       case 'get_pipeline': {
-        const content = readSafe(PATHS.pipeline);
+        const content = await readSafeAsync(PATHS.pipeline);
         const entries = parsePipeline(content);
         return { count: entries.length, top5: entries.slice(0, 5).map(e => `${e.company}: ${e.title} (${e.tier})`) };
       }
       case 'get_tracker': {
-        const content = readSafe(PATHS.tracker);
+        const content = await readSafeAsync(PATHS.tracker);
         const rows = parseTracker(content);
         return { count: rows.length, entries: rows.slice(0, 10).map(r => `${r.Company || r.company}: ${r.Role || r.role} [${r.Status || r.status}] ${r.Score || r.score || ''}`) };
       }
@@ -252,6 +315,63 @@ async function executeToolCall(name, args) {
 
 const ROOT = __dirname;
 
+// File cache for ETag-based cache validation on GET endpoints
+const fileCache = createFileCache();
+
+// Memory Deduplication -- imported from lib/parsers.mjs
+
+// ---------------------------------------------------------------------------
+// Rate Limiting (in-memory, no dependencies)
+// ---------------------------------------------------------------------------
+
+/**
+ * Simple sliding-window rate limiter.
+ * windowMs: time window in milliseconds
+ * max: maximum requests allowed in that window
+ */
+function createRateLimiter(windowMs, max) {
+  const hits = new Map(); // key -> [timestamps]
+
+  return function rateLimit(req, res, next) {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    // Get or create timestamps array
+    let timestamps = hits.get(key) || [];
+    // Purge expired entries
+    timestamps = timestamps.filter(t => t > windowStart);
+
+    if (timestamps.length >= max) {
+      const retryAfter = Math.ceil((timestamps[0] + windowMs - now) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({
+        error: 'Too many requests. Please wait before trying again.',
+        retryAfter,
+      });
+    }
+
+    timestamps.push(now);
+    hits.set(key, timestamps);
+
+    // Periodic cleanup: remove stale keys every 100 requests
+    if (hits.size > 100) {
+      for (const [k, v] of hits) {
+        const fresh = v.filter(t => t > windowStart);
+        if (fresh.length === 0) hits.delete(k);
+        else hits.set(k, fresh);
+      }
+    }
+
+    next();
+  };
+}
+
+// Rate limiters for different endpoint tiers
+const apiProxyLimiter = createRateLimiter(60_000, 10);  // 10 req/min for AI proxy endpoints
+const writeEndpointLimiter = createRateLimiter(60_000, 30);  // 30 req/min for write operations
+const readEndpointLimiter = createRateLimiter(60_000, 120);  // 120 req/min for read operations
+
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
@@ -268,393 +388,77 @@ function log(level, msg) {
 // ---------------------------------------------------------------------------
 
 /**
- * Read a file safely, returning empty string if it doesn't exist.
+ * Read a file safely (async), returning empty string if it doesn't exist.
+ * Preferred in request handlers over the sync version.
  */
-function readSafe(filePath) {
+async function readSafeAsync(filePath) {
   try {
-    if (!existsSync(filePath)) return '';
-    return readFileSync(filePath, 'utf-8');
+    return await readFile(filePath, 'utf-8');
   } catch {
     return '';
   }
 }
 
 /**
- * Parse a markdown table into structured data.
- * Returns { headers: string[], rows: object[] } where each row is keyed by header.
+ * Read and parse a JSON file safely (async), returning fallback if it doesn't exist.
  */
-function parseMdTable(content) {
-  const lines = content.split('\n');
-  const result = { headers: [], rows: [] };
-
-  let headerLine = -1;
-  let separatorLine = -1;
-
-  // Find the header row (first line starting with |) and separator (|---|)
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith('|') && !trimmed.match(/^\|\s*-/)) {
-      if (headerLine === -1) {
-        headerLine = i;
-      }
-    }
-    if (trimmed.startsWith('|') && trimmed.match(/^\|\s*-/)) {
-      separatorLine = i;
-      break;
-    }
+async function readJsonSafeAsync(filePath, fallback) {
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return fallback;
   }
-
-  if (headerLine === -1 || separatorLine === -1) return result;
-
-  // Parse headers
-  result.headers = lines[headerLine]
-    .split('|')
-    .map(s => s.trim())
-    .filter(Boolean);
-
-  // Parse data rows (everything after separator that starts with |)
-  for (let i = separatorLine + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line.startsWith('|')) continue;
-
-    const cells = line.split('|').map(s => s.trim()).filter(Boolean);
-    if (cells.length === 0) continue;
-
-    // Skip rows that are all empty
-    if (cells.every(c => c === '')) continue;
-
-    const row = {};
-    result.headers.forEach((header, idx) => {
-      row[header] = cells[idx] || '';
-    });
-    result.rows.push(row);
-  }
-
-  return result;
 }
 
-/**
- * Parse markdown content into sections by headings.
- * Returns array of { title: string, level: number, body: string }.
- */
-function parseMdSections(content) {
-  const lines = content.split('\n');
-  const sections = [];
-  let current = null;
-  let bodyLines = [];
+// parseMdTable -- imported from lib/parsers.mjs
 
-  for (const line of lines) {
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
-    if (headingMatch) {
-      // Save previous section
-      if (current) {
-        current.body = bodyLines.join('\n').trim();
-        sections.push(current);
-      }
-      current = {
-        title: headingMatch[2].trim(),
-        level: headingMatch[1].length,
-        body: '',
-      };
-      bodyLines = [];
-    } else {
-      bodyLines.push(line);
-    }
-  }
+// parseMdSections -- imported from lib/parsers.mjs
 
-  // Save last section
-  if (current) {
-    current.body = bodyLines.join('\n').trim();
-    sections.push(current);
-  }
+// parseSimpleYaml -- imported from lib/parsers.mjs
 
-  return sections;
-}
+// parseYamlList -- imported from lib/parsers.mjs
 
-/**
- * Parse simple flat YAML (key: "value" or key: value).
- * Handles nested keys one level deep (parent.child).
- * Returns a flat object.
- */
-function parseSimpleYaml(content) {
-  const result = {};
-  let currentParent = '';
-  const lines = content.split('\n');
+// parseEnvStatus -- imported from lib/parsers.mjs
 
-  for (const line of lines) {
-    // Skip comments and empty lines
-    if (line.trim().startsWith('#') || line.trim() === '') continue;
+// parsePipeline -- imported from lib/parsers.mjs
 
-    // Check indentation level
-    const indent = line.match(/^(\s*)/)[1].length;
+// parseTracker -- imported from lib/parsers.mjs
 
-    // Top-level key (no indent or section header)
-    const kvMatch = line.match(/^(\s*)(\w[\w_]*)\s*:\s*(.*)$/);
-    if (!kvMatch) continue;
+// parseScanHistory -- imported from lib/parsers.mjs
 
-    const [, spaces, key, rawValue] = kvMatch;
-    const indentLevel = spaces.length;
-
-    // Clean the value: strip quotes, handle arrays/booleans
-    let value = rawValue.trim();
-
-    if (indentLevel === 0) {
-      // Top-level key
-      if (value === '' || value === '|' || value === '>') {
-        // This is a section header
-        currentParent = key;
-        continue;
-      }
-      value = value.replace(/^["']|["']$/g, '');
-      result[key] = value;
-    } else {
-      // Nested key
-      value = value.replace(/^["']|["']$/g, '');
-      const fullKey = currentParent ? `${currentParent}.${key}` : key;
-      result[fullKey] = value;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Parse YAML list items under a key.
- * Returns array of strings or objects.
- */
-function parseYamlList(content, sectionKey) {
-  const lines = content.split('\n');
-  const items = [];
-  let inSection = false;
-  let sectionIndent = -1;
-
-  for (const line of lines) {
-    if (line.trim().startsWith('#') || line.trim() === '') continue;
-
-    // Check if we're entering the target section (escape sectionKey for safe regex)
-    const escapedKey = sectionKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const sectionMatch = line.match(new RegExp(`^(\\s*)${escapedKey}\\s*:`));
-    if (sectionMatch) {
-      inSection = true;
-      sectionIndent = sectionMatch[1].length;
-      continue;
-    }
-
-    if (inSection) {
-      const indent = line.match(/^(\s*)/)[1].length;
-      // If we hit a line at same or lower indent that's a new key, exit
-      if (indent <= sectionIndent && line.match(/^\s*\w[\w_]*\s*:/)) {
-        inSection = false;
-        continue;
-      }
-
-      // Parse list item
-      const listMatch = line.match(/^\s*-\s+(.+)/);
-      if (listMatch) {
-        let val = listMatch[1].trim().replace(/^["']|["']$/g, '');
-        items.push(val);
-      }
-    }
-  }
-
-  return items;
-}
-
-/**
- * Return boolean status for each known .env key. NEVER returns actual values.
- */
-function parseEnvStatus() {
-  const keys = [
-    'GEMINI_API_KEY',
-    'ELEVENLABS_API_KEY',
-    'ANTHROPIC_API_KEY',
-    'OPENAI_API_KEY',
-    'OPENROUTER_API_KEY',
-    'PERPLEXITY_API_KEY',
-    'FIRECRAWL_API_KEY',
-    'LOGO_DEV_PUBLISHABLE_KEY',
-    'LOGO_DEV_SECRET_KEY',
-    'HUGGINGFACE_TOKEN',
-  ];
-
-  const status = {};
-  for (const key of keys) {
-    status[key] = !!(process.env[key] && process.env[key].trim().length > 0);
-  }
-  return status;
-}
-
-/**
- * Parse the pipeline.md file into structured offer objects.
- * Pipeline format varies -- may be a table or a list of URLs with context.
- */
-function parsePipeline(content) {
-  if (!content.trim()) return [];
-  const entries = [];
-  for (const line of content.split('\n')) {
-    // Format: - [ ] URL | Company | Title  OR  - [x] URL | Company | Title
-    const m = line.match(/^- \[[ x]\]\s+(\S+)\s+\|\s+(.+?)\s+\|\s+(.+)$/);
-    if (m) {
-      const title = m[3].trim();
-      const tier = /\b(VP|Vice President|Chief|CAIO|CTO)\b/i.test(title) ? 'c-suite'
-        : /\b(Director|Head)\b/i.test(title) ? 'director' : 'other';
-      entries.push({ url: m[1], company: m[2].trim(), title, tier, done: line.includes('[x]') });
-    }
-  }
-  // Fallback to table format if no list entries found
-  if (entries.length === 0) {
-    const table = parseMdTable(content);
-    return table.rows;
-  }
-  return entries;
-}
-
-/**
- * Parse the tracker (applications.md) into row objects.
- * Columns: #, Date, Company, Role, Score, Status, PDF, Report, Notes
- */
-function parseTracker(content) {
-  if (!content.trim()) return [];
-
-  const lines = content.split('\n');
-  const rows = [];
-
-  for (const line of lines) {
-    if (!line.startsWith('|')) continue;
-    // Skip header and separator
-    if (line.includes('---') || line.match(/\|\s*#\s*\|/)) continue;
-
-    const cells = line.split('|').map(s => s.trim());
-    // Filter empty leading/trailing cells from pipe split
-    const parts = cells.filter(Boolean);
-    if (parts.length < 8) continue;
-
-    const num = parseInt(parts[0]);
-    if (isNaN(num)) continue;
-
-    rows.push({
-      num,
-      date: parts[1] || '',
-      company: parts[2] || '',
-      role: parts[3] || '',
-      score: parts[4] || '',
-      status: parts[5] || '',
-      pdf: parts[6] || '',
-      report: parts[7] || '',
-      notes: parts[8] || '',
-    });
-  }
-
-  return rows;
-}
-
-/**
- * Parse scan-history.tsv into structured data.
- */
-function parseScanHistory(content) {
-  if (!content.trim()) return [];
-
-  const lines = content.split('\n').filter(l => l.trim());
-  const rows = [];
-
-  for (const line of lines) {
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-    rows.push({
-      date: parts[0] || '',
-      url: parts[1] || '',
-      company: parts[2] || '',
-      role: parts[3] || '',
-      status: parts[4] || '',
-    });
-  }
-
-  return rows;
-}
-
-/**
- * Compute analytics from tracker data.
- */
-function computeAnalytics(trackerRows) {
-  const statusCounts = {};
-  const scores = [];
-  const weeklyMap = {};
-
-  for (const row of trackerRows) {
-    // Status counts
-    const status = row.status.replace(/\*\*/g, '').trim();
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
-
-    // Score distribution
-    const scoreMatch = row.score.replace(/\*\*/g, '').match(/([\d.]+)\/5/);
-    if (scoreMatch) {
-      scores.push(parseFloat(scoreMatch[1]));
-    }
-
-    // Weekly velocity
-    if (row.date && row.date.match(/\d{4}-\d{2}-\d{2}/)) {
-      const d = new Date(row.date);
-      // Get ISO week start (Monday)
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const weekStart = new Date(d.setDate(diff));
-      const weekKey = weekStart.toISOString().substring(0, 10);
-
-      if (!weeklyMap[weekKey]) {
-        weeklyMap[weekKey] = { evaluated: 0, applied: 0, total: 0 };
-      }
-      weeklyMap[weekKey].total++;
-      if (/evaluad|evaluated/i.test(status)) weeklyMap[weekKey].evaluated++;
-      if (/aplicad|applied/i.test(status)) weeklyMap[weekKey].applied++;
-    }
-  }
-
-  // Score distribution buckets
-  const scoreDistribution = {
-    '4.5+': scores.filter(s => s >= 4.5).length,
-    '4.0-4.4': scores.filter(s => s >= 4.0 && s < 4.5).length,
-    '3.5-3.9': scores.filter(s => s >= 3.5 && s < 4.0).length,
-    '3.0-3.4': scores.filter(s => s >= 3.0 && s < 3.5).length,
-    'below 3.0': scores.filter(s => s < 3.0).length,
-  };
-
-  const avgScore = scores.length > 0
-    ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)
-    : null;
-
-  // Weekly velocity sorted by date
-  const velocity = Object.entries(weeklyMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([week, data]) => ({ week, ...data }));
-
-  return {
-    total: trackerRows.length,
-    statusCounts,
-    scoreDistribution,
-    avgScore,
-    velocity,
-  };
-}
+// computeAnalytics -- imported from lib/parsers.mjs
 
 // ---------------------------------------------------------------------------
 // Dynamic System Instruction Builder
 // ---------------------------------------------------------------------------
 
-function buildSystemInstruction() {
+async function buildSystemInstruction() {
   const base = GEMINI_SYSTEM_INSTRUCTION;
 
-  // Load memories
+  // Load memories, CV, and pipeline/tracker in parallel (async)
   const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-  let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-  try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+  const [memories, cvContent, pipeline, tracker] = await Promise.all([
+    readJsonSafeAsync(memoryPath, { careerFacts: [], preferences: [], actionItems: [], conversations: [] }),
+    readSafeAsync(PATHS.cv),
+    readSafeAsync(PATHS.pipeline),
+    readSafeAsync(PATHS.tracker),
+  ]);
 
-  // Load current pipeline/tracker stats
-  const pipeline = readSafe(PATHS.pipeline);
-  const tracker = readSafe(PATHS.tracker);
   const pipelineCount = (pipeline.match(/^- \[/gm) || []).length;
   const appCount = (tracker.match(/^\|\s*\d+/gm) || []).length;
 
   let instruction = base;
+
+  // Extract top 5 proof points from CV for roleplay and interview scenarios.
+  // Proof points are lines containing quantified metrics (numbers with context).
+  if (cvContent) {
+    const proofPoints = extractProofPoints(cvContent, 5);
+    if (proofPoints.length > 0) {
+      instruction += '\n\nKEY PROOF POINTS (use these in roleplay, interview prep, and to push for specificity):\n';
+      proofPoints.forEach(p => { instruction += `- ${p}\n`; });
+    }
+  }
 
   // Add career facts from memory
   if (memories.careerFacts?.length) {
@@ -687,6 +491,11 @@ function buildSystemInstruction() {
   return instruction;
 }
 
+// extractProofPoints -- imported from lib/intelligence.mjs
+// summarizeConversationHistory -- imported from lib/intelligence.mjs
+// parseTitleFilter -- imported from lib/intelligence.mjs
+// matchesTitleFilter -- imported from lib/intelligence.mjs
+
 // ---------------------------------------------------------------------------
 // Express App
 // ---------------------------------------------------------------------------
@@ -696,11 +505,37 @@ const app = express();
 // Middleware -- limit request body to 1MB to prevent abuse
 app.use(express.json({ limit: '1mb' }));
 
-// CORS for local dev
+// Response compression (gzip/deflate) for API JSON responses
+app.use(compressionMiddleware());
+
+// CORS -- restrict to localhost origins only (all common dev ports)
+const ALLOWED_ORIGINS = new Set([
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  'http://localhost:3000',
+  'http://localhost:3333',
+  'http://localhost:4000',
+  'http://localhost:5173',
+  'http://localhost:8080',
+]);
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.has(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  }
+  // Requests from same origin (no Origin header) are always allowed
   res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  // Security headers
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('X-Frame-Options', 'DENY');
+  res.header('X-XSS-Protection', '1; mode=block');
+  res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' ws://localhost:* wss://localhost:*");
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
@@ -725,9 +560,9 @@ app.use(express.static(PATHS.publicDir));
 /**
  * GET /api/profile -- Returns parsed config/profile.yml
  */
-app.get('/api/profile', (req, res) => {
+app.get('/api/profile', fileCache.middleware(PATHS.profile), async (req, res) => {
   try {
-    const content = readSafe(PATHS.profile);
+    const content = await readSafeAsync(PATHS.profile);
     if (!content) {
       return res.json({ configured: false, message: 'Profile not configured. Run onboarding first.' });
     }
@@ -778,13 +613,59 @@ app.get('/api/profile', (req, res) => {
 });
 
 /**
- * GET /api/pipeline -- Returns parsed data/pipeline.md
+ * GET /api/pipeline -- Returns parsed data/pipeline.md with optional pagination
+ * Query params:
+ *   page  -- page number (1-based), default: 1 (0 = return all)
+ *   limit -- items per page, default: 50 (max: 200)
+ *   tier  -- filter by tier: 'c-suite', 'director', 'other'
+ *   q     -- search term to filter by company or title
  */
-app.get('/api/pipeline', (req, res) => {
+app.get('/api/pipeline', fileCache.middleware(PATHS.pipeline), async (req, res) => {
   try {
-    const content = readSafe(PATHS.pipeline);
-    const entries = parsePipeline(content);
-    res.json({ count: entries.length, entries });
+    const content = await readSafeAsync(PATHS.pipeline);
+    let entries = parsePipeline(content);
+
+    // Filter by tier if specified
+    const tierFilter = req.query.tier;
+    if (tierFilter && ['c-suite', 'director', 'other'].includes(tierFilter)) {
+      entries = entries.filter(e => {
+        const tier = e.tier || classifyTier(e.title || e.role || '');
+        return tier === tierFilter;
+      });
+    }
+
+    // Search filter
+    const searchQuery = (req.query.q || '').toLowerCase().trim();
+    if (searchQuery) {
+      entries = entries.filter(e => {
+        const company = (e.company || e.Company || '').toLowerCase();
+        const title = (e.title || e.Title || e.role || e.Role || '').toLowerCase();
+        return company.includes(searchQuery) || title.includes(searchQuery);
+      });
+    }
+
+    const totalCount = entries.length;
+    const rawPage = parseInt(req.query.page);
+    const page = isNaN(rawPage) ? 1 : Math.max(0, rawPage);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+
+    // page=0 means return all (backwards compatible)
+    if (page === 0) {
+      return res.json({ count: totalCount, entries, page: 0, limit: totalCount, totalPages: 1 });
+    }
+
+    const totalPages = Math.ceil(totalCount / limit);
+    const offset = (page - 1) * limit;
+    const pagedEntries = entries.slice(offset, offset + limit);
+
+    res.json({
+      count: totalCount,
+      entries: pagedEntries,
+      page,
+      limit,
+      totalPages,
+      hasMore: page < totalPages,
+    });
   } catch (err) {
     log('ERROR', `GET /api/pipeline: ${err.message}`);
     res.status(500).json({ error: 'Failed to read pipeline', detail: err.message });
@@ -794,9 +675,9 @@ app.get('/api/pipeline', (req, res) => {
 /**
  * GET /api/tracker -- Returns parsed data/applications.md
  */
-app.get('/api/tracker', (req, res) => {
+app.get('/api/tracker', fileCache.middleware(PATHS.tracker), async (req, res) => {
   try {
-    const content = readSafe(PATHS.tracker);
+    const content = await readSafeAsync(PATHS.tracker);
     const rows = parseTracker(content);
     res.json({ count: rows.length, rows });
   } catch (err) {
@@ -808,13 +689,12 @@ app.get('/api/tracker', (req, res) => {
 /**
  * GET /api/reports -- Returns list of report files
  */
-app.get('/api/reports', (req, res) => {
+app.get('/api/reports', async (req, res) => {
   try {
-    if (!existsSync(PATHS.reportsDir)) {
-      return res.json({ count: 0, files: [] });
-    }
+    let dirFiles;
+    try { dirFiles = await readdir(PATHS.reportsDir); } catch { return res.json({ count: 0, files: [] }); }
 
-    const files = readdirSync(PATHS.reportsDir)
+    const files = dirFiles
       .filter(f => f.endsWith('.md') && f !== '.gitkeep')
       .sort()
       .reverse(); // Most recent first
@@ -840,7 +720,7 @@ app.get('/api/reports', (req, res) => {
 /**
  * GET /api/reports/:file -- Returns content of a specific report
  */
-app.get('/api/reports/:file', (req, res) => {
+app.get('/api/reports/:file', async (req, res) => {
   try {
     const filename = req.params.file;
 
@@ -850,11 +730,11 @@ app.get('/api/reports/:file', (req, res) => {
     }
 
     const filePath = join(PATHS.reportsDir, filename);
-    if (!existsSync(filePath)) {
+    const content = await readSafeAsync(filePath);
+    if (!content) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    const content = readFileSync(filePath, 'utf-8');
     const sections = parseMdSections(content);
 
     res.json({ file: filename, content, sections });
@@ -867,9 +747,9 @@ app.get('/api/reports/:file', (req, res) => {
 /**
  * GET /api/scan-history -- Returns parsed data/scan-history.tsv
  */
-app.get('/api/scan-history', (req, res) => {
+app.get('/api/scan-history', fileCache.middleware(PATHS.scanHistory), async (req, res) => {
   try {
-    const content = readSafe(PATHS.scanHistory);
+    const content = await readSafeAsync(PATHS.scanHistory);
     const rows = parseScanHistory(content);
     res.json({ count: rows.length, rows });
   } catch (err) {
@@ -881,9 +761,9 @@ app.get('/api/scan-history', (req, res) => {
 /**
  * GET /api/contacts -- Returns parsed crm/contacts.md
  */
-app.get('/api/contacts', (req, res) => {
+app.get('/api/contacts', fileCache.middleware(PATHS.contacts), async (req, res) => {
   try {
-    const content = readSafe(PATHS.contacts);
+    const content = await readSafeAsync(PATHS.contacts);
     const table = parseMdTable(content);
     res.json({ count: table.rows.length, contacts: table.rows });
   } catch (err) {
@@ -895,9 +775,9 @@ app.get('/api/contacts', (req, res) => {
 /**
  * GET /api/follow-ups -- Returns parsed crm/follow-up-queue.md
  */
-app.get('/api/follow-ups', (req, res) => {
+app.get('/api/follow-ups', async (req, res) => {
   try {
-    const content = readSafe(PATHS.followUps);
+    const content = await readSafeAsync(PATHS.followUps);
     const table = parseMdTable(content);
     const sections = parseMdSections(content);
     res.json({ count: table.rows.length, followUps: table.rows, sections });
@@ -910,9 +790,9 @@ app.get('/api/follow-ups', (req, res) => {
 /**
  * GET /api/story-bank -- Returns parsed interview-prep/story-bank.md
  */
-app.get('/api/story-bank', (req, res) => {
+app.get('/api/story-bank', async (req, res) => {
   try {
-    const content = readSafe(PATHS.storyBank);
+    const content = await readSafeAsync(PATHS.storyBank);
     if (!content) {
       return res.json({ configured: false, sections: [] });
     }
@@ -928,7 +808,7 @@ app.get('/api/story-bank', (req, res) => {
  * GET /api/connectors -- Returns boolean status of API keys and MCP services
  * NEVER returns actual key values.
  */
-app.get('/api/connectors', (req, res) => {
+app.get('/api/connectors', async (req, res) => {
   try {
     const keys = parseEnvStatus();
 
@@ -950,12 +830,14 @@ app.get('/api/connectors', (req, res) => {
 /**
  * GET /api/comp -- Returns parsed comp-lab files + profile comp data
  */
-app.get('/api/comp', (req, res) => {
+app.get('/api/comp', async (req, res) => {
   try {
-    const marketData = readSafe(PATHS.marketData);
-    const negotiation = readSafe(PATHS.negotiation);
-    const roleComp = readSafe(PATHS.roleComp);
-    const profileContent = readSafe(PATHS.profile);
+    const [marketData, negotiation, roleComp, profileContent] = await Promise.all([
+      readSafeAsync(PATHS.marketData),
+      readSafeAsync(PATHS.negotiation),
+      readSafeAsync(PATHS.roleComp),
+      readSafeAsync(PATHS.profile),
+    ]);
 
     const marketTable = parseMdTable(marketData);
     const roleCompTable = parseMdTable(roleComp);
@@ -991,11 +873,13 @@ app.get('/api/comp', (req, res) => {
 /**
  * GET /api/brand -- Returns parsed brand files
  */
-app.get('/api/brand', (req, res) => {
+app.get('/api/brand', async (req, res) => {
   try {
-    const brandPos = readSafe(PATHS.brandPos);
-    const contentCal = readSafe(PATHS.contentCal);
-    const engagement = readSafe(PATHS.engagement);
+    const [brandPos, contentCal, engagement] = await Promise.all([
+      readSafeAsync(PATHS.brandPos),
+      readSafeAsync(PATHS.contentCal),
+      readSafeAsync(PATHS.engagement),
+    ]);
 
     res.json({
       positioning: {
@@ -1022,9 +906,9 @@ app.get('/api/brand', (req, res) => {
 /**
  * GET /api/analytics -- Returns computed analytics from applications.md
  */
-app.get('/api/analytics', (req, res) => {
+app.get('/api/analytics', fileCache.middleware(PATHS.tracker), async (req, res) => {
   try {
-    const content = readSafe(PATHS.tracker);
+    const content = await readSafeAsync(PATHS.tracker);
     const rows = parseTracker(content);
     const analytics = computeAnalytics(rows);
     res.json(analytics);
@@ -1042,28 +926,33 @@ app.get('/api/analytics', (req, res) => {
  * POST /api/generate -- Generate content with AI (Anthropic Claude API)
  * Body: { type: "resume"|"cover-letter"|"email-draft"|"interview-prep", roleId: number, context: string }
  */
-app.post('/api/generate', async (req, res) => {
+app.post('/api/generate', apiProxyLimiter, async (req, res) => {
   try {
     const { type, roleId, context } = req.body;
 
     if (!type || !['resume', 'cover-letter', 'email-draft', 'interview-prep'].includes(type)) {
       return res.status(400).json({
-        error: 'Invalid type. Must be one of: resume, cover-letter, email-draft, interview-prep',
+        error: 'Invalid or missing content type.',
+        hint: 'Set "type" to one of: resume, cover-letter, email-draft, interview-prep. Example: { "type": "resume", "context": "Company - Role" }',
+        validTypes: ['resume', 'cover-letter', 'email-draft', 'interview-prep'],
       });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return res.status(503).json({
-        error: 'ANTHROPIC_API_KEY not configured. Add it to your .env file.',
+        error: 'ANTHROPIC_API_KEY is not configured.',
+        hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file in the project root, then restart the server. Get a key at https://console.anthropic.com/settings/keys',
       });
     }
 
-    // Gather context
-    const cv = readSafe(PATHS.cv);
-    const articleDigest = readSafe(PATHS.articleDigest);
-    const profileContent = readSafe(PATHS.profile);
-    const trackerContent = readSafe(PATHS.tracker);
+    // Gather context (async parallel reads)
+    const [cv, articleDigest, profileContent, trackerContent] = await Promise.all([
+      readSafeAsync(PATHS.cv),
+      readSafeAsync(PATHS.articleDigest),
+      readSafeAsync(PATHS.profile),
+      readSafeAsync(PATHS.tracker),
+    ]);
     const trackerRows = parseTracker(trackerContent);
 
     // Find the specific role if roleId provided
@@ -1239,7 +1128,7 @@ app.post('/api/verify', async (req, res) => {
  * PATCH /api/tracker/:num -- Update an application's status/notes
  * Body: { status?: string, notes?: string }
  */
-app.patch('/api/tracker/:num', (req, res) => {
+app.patch('/api/tracker/:num', writeEndpointLimiter, async (req, res) => {
   try {
     const num = parseInt(req.params.num);
     if (isNaN(num)) {
@@ -1253,7 +1142,7 @@ app.patch('/api/tracker/:num', (req, res) => {
 
     // Validate status against canonical states if provided
     if (status) {
-      const statesContent = readSafe(PATHS.statesYml);
+      const statesContent = await readSafeAsync(PATHS.statesYml);
       const validStates = [];
       const stateMatches = statesContent.matchAll(/label:\s*(.+)/g);
       for (const m of stateMatches) {
@@ -1270,7 +1159,7 @@ app.patch('/api/tracker/:num', (req, res) => {
       }
     }
 
-    const content = readSafe(PATHS.tracker);
+    const content = await readSafeAsync(PATHS.tracker);
     if (!content) {
       return res.status(404).json({ error: 'Tracker file not found' });
     }
@@ -1308,7 +1197,8 @@ app.patch('/api/tracker/:num', (req, res) => {
       return res.status(404).json({ error: `Entry #${num} not found in tracker` });
     }
 
-    writeFileSync(PATHS.tracker, lines.join('\n'));
+    await writeFile(PATHS.tracker, lines.join('\n'));
+    fileCache.invalidate(PATHS.tracker);
     res.json({ success: true, num, status, notes });
   } catch (err) {
     log('ERROR', `PATCH /api/tracker/${req.params.num}: ${err.message}`);
@@ -1319,9 +1209,9 @@ app.patch('/api/tracker/:num', (req, res) => {
 /**
  * POST /api/verify-all -- Verify ALL pipeline offers (batch)
  */
-app.post('/api/verify-all', async (req, res) => {
+app.post('/api/verify-all', writeEndpointLimiter, async (req, res) => {
   try {
-    const content = readSafe(PATHS.pipeline);
+    const content = await readSafeAsync(PATHS.pipeline);
     const entries = parsePipeline(content);
 
     if (entries.length === 0) {
@@ -1395,16 +1285,22 @@ app.post('/api/verify-all', async (req, res) => {
  * POST /api/evaluate -- Evaluate a JD (URL or text) using Anthropic Claude
  * Body: { url?: string, text?: string }
  */
-app.post('/api/evaluate', async (req, res) => {
+app.post('/api/evaluate', apiProxyLimiter, async (req, res) => {
   try {
     const { url, text } = req.body;
     if (!url && !text) {
-      return res.status(400).json({ error: 'Provide either url or text' });
+      return res.status(400).json({
+        error: 'Either a job URL or description text is required.',
+        hint: 'Send { "url": "https://..." } to evaluate by URL, or { "text": "Job description..." } to evaluate raw text.',
+      });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured. Add it to your .env file.' });
+      return res.status(503).json({
+        error: 'ANTHROPIC_API_KEY is not configured.',
+        hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file, then restart the server.',
+      });
     }
 
     let jdText = text || '';
@@ -1435,10 +1331,12 @@ app.post('/api/evaluate', async (req, res) => {
       }
     }
 
-    // Read context files
-    const cv = readSafe(PATHS.cv);
-    const profileContent = readSafe(PATHS.profile);
-    const sharedContext = readSafe(join(__dirname, 'modes/_shared.md'));
+    // Read context files (async parallel)
+    const [cv, profileContent, sharedContext] = await Promise.all([
+      readSafeAsync(PATHS.cv),
+      readSafeAsync(PATHS.profile),
+      readSafeAsync(join(__dirname, 'modes/_shared.md')),
+    ]);
 
     const systemPrompt = `You are an expert career advisor evaluating a job description against a candidate profile. Use the Career-OS evaluation framework. Score the role 1-5 based on fit. Identify the matching archetype. Return your analysis as JSON with keys: score (number 1-5 with one decimal), summary (2-3 sentences), report (full markdown evaluation report), archetype (best matching archetype name).
 
@@ -1465,7 +1363,7 @@ ${sharedContext.substring(0, 3000)}`;
 
     if (!response.ok) {
       const errBody = await response.text();
-      return res.status(502).json({ error: 'Anthropic API error', detail: errBody });
+      return res.status(502).json({ error: 'Anthropic API request failed.', hint: 'This usually means the API key is invalid, expired, or rate-limited. Check your ANTHROPIC_API_KEY in .env and try again.', detail: errBody });
     }
 
     const data = await response.json();
@@ -1490,16 +1388,24 @@ ${sharedContext.substring(0, 3000)}`;
 
 /**
  * POST /api/scan -- Trigger a portal scan
- * Reads portals.yml, fetches Greenhouse APIs, filters by title_filter
+ * Reads portals.yml, fetches Greenhouse APIs, applies global title_filter
+ * (positive keywords must match, negative keywords must not match) plus
+ * per-company title_filter overrides for precision filtering.
  */
-app.post('/api/scan', async (req, res) => {
+app.post('/api/scan', writeEndpointLimiter, async (req, res) => {
   try {
     const portalsPath = join(__dirname, 'portals.yml');
-    const portalsContent = readSafe(portalsPath);
+    const portalsContent = await readSafeAsync(portalsPath);
 
     if (!portalsContent) {
-      return res.status(404).json({ error: 'portals.yml not found. Run onboarding first.' });
+      return res.status(404).json({
+        error: 'portals.yml not found.',
+        hint: 'Run onboarding first: type "/career-os setup" in Claude Code, or copy templates/portals.example.yml to portals.yml.',
+      });
     }
+
+    // Parse global title_filter keywords from portals.yml
+    const globalFilter = parseTitleFilter(portalsContent);
 
     // Parse tracked companies with API endpoints from portals.yml
     const companies = [];
@@ -1524,9 +1430,10 @@ app.post('/api/scan', async (req, res) => {
     const apiCompanies = companies.filter(c => c.api);
     const results = [];
     let added = 0;
+    let filteredOut = 0;
 
     // Read existing pipeline to avoid duplicates
-    const pipelineContent = readSafe(PATHS.pipeline);
+    const pipelineContent = await readSafeAsync(PATHS.pipeline);
     const existingUrls = new Set();
     for (const line of pipelineContent.split('\n')) {
       const urlMatch = line.match(/https?:\/\/\S+/);
@@ -1549,8 +1456,14 @@ app.post('/api/scan', async (req, res) => {
 
         for (const job of jobs) {
           const title = (job.title || '').toLowerCase();
-          const matchesFilter = company.filters.length === 0 || company.filters.some(f => title.includes(f));
-          if (!matchesFilter) continue;
+
+          // Per-company filter (legacy: inline title_filter on the company)
+          const matchesCompanyFilter = company.filters.length === 0 || company.filters.some(f => title.includes(f));
+          if (!matchesCompanyFilter) { filteredOut++; continue; }
+
+          // Global title_filter: positive keywords (at least one must match)
+          // and negative keywords (none must match)
+          if (!matchesTitleFilter(title, globalFilter)) { filteredOut++; continue; }
 
           const jobUrl = job.absolute_url || job.url || job.apply_url || '';
           if (!jobUrl || existingUrls.has(jobUrl)) continue;
@@ -1570,15 +1483,100 @@ app.post('/api/scan', async (req, res) => {
       for (const r of results) {
         appendText += `\n- [ ] ${r.url} | ${r.company} | ${r.title}`;
       }
-      const currentPipeline = readSafe(PATHS.pipeline);
-      writeFileSync(PATHS.pipeline, currentPipeline + appendText);
+      const currentPipeline = await readSafeAsync(PATHS.pipeline);
+      await writeFile(PATHS.pipeline, currentPipeline + appendText);
+      fileCache.invalidate(PATHS.pipeline);
     }
 
-    log('INFO', `Scan complete: found ${results.length}, added ${added}`);
-    res.json({ found: results.length, added, results });
+    log('INFO', `Scan complete: found ${results.length}, added ${added}, filtered out ${filteredOut} by title keywords`);
+    res.json({ found: results.length, added, filteredOut, results });
   } catch (err) {
     log('ERROR', `POST /api/scan: ${err.message}`);
     res.status(500).json({ error: 'Scan failed', detail: err.message });
+  }
+});
+
+/**
+ * POST /api/pipeline/add -- Add a single entry to pipeline with URL dedup
+ * Body: { url: string, company: string, title: string }
+ */
+app.post('/api/pipeline/add', writeEndpointLimiter, async (req, res) => {
+  try {
+    const { url, company, title } = req.body;
+    if (!url || !company || !title) {
+      return res.status(400).json({ error: 'url, company, and title are required' });
+    }
+    if (!url.startsWith('http')) {
+      return res.status(400).json({ error: 'URL must start with http:// or https://' });
+    }
+
+    const content = await readSafeAsync(PATHS.pipeline);
+    // Check for duplicate URL
+    const existingUrls = new Set();
+    for (const line of content.split('\n')) {
+      const m = line.match(/https?:\/\/\S+/);
+      if (m) existingUrls.add(m[0]);
+    }
+    if (existingUrls.has(url)) {
+      return res.json({ success: false, duplicate: true, message: `URL already in pipeline: ${url}` });
+    }
+
+    const newLine = `\n- [ ] ${url} | ${company} | ${title}`;
+    await writeFile(PATHS.pipeline, content + newLine);
+    fileCache.invalidate(PATHS.pipeline);
+    log('INFO', `Added to pipeline: ${company} - ${title}`);
+    res.json({ success: true, duplicate: false });
+  } catch (err) {
+    log('ERROR', `POST /api/pipeline/add: ${err.message}`);
+    res.status(500).json({ error: 'Failed to add to pipeline', detail: err.message });
+  }
+});
+
+/**
+ * GET /api/pipeline/duplicates -- Find duplicate URLs in pipeline
+ */
+app.get('/api/pipeline/duplicates', async (req, res) => {
+  try {
+    const content = await readSafeAsync(PATHS.pipeline);
+    const urlCounts = new Map();
+    for (const line of content.split('\n')) {
+      const m = line.match(/https?:\/\/\S+/);
+      if (m) {
+        urlCounts.set(m[0], (urlCounts.get(m[0]) || 0) + 1);
+      }
+    }
+    const duplicates = [];
+    for (const [url, count] of urlCounts) {
+      if (count > 1) duplicates.push({ url, count });
+    }
+    res.json({ count: duplicates.length, duplicates });
+  } catch (err) {
+    log('ERROR', `GET /api/pipeline/duplicates: ${err.message}`);
+    res.status(500).json({ error: 'Failed to check duplicates', detail: err.message });
+  }
+});
+
+/**
+ * GET /api/tracker/duplicates -- Find duplicate company+role entries in tracker
+ */
+app.get('/api/tracker/duplicates', async (req, res) => {
+  try {
+    const content = await readSafeAsync(PATHS.tracker);
+    const rows = parseTracker(content);
+    const seen = new Map();
+    const duplicates = [];
+    for (const row of rows) {
+      const key = `${(row.company || '').toLowerCase().trim()}|${(row.role || '').toLowerCase().trim()}`;
+      if (seen.has(key)) {
+        duplicates.push({ num: row.num, company: row.company, role: row.role, duplicateOf: seen.get(key) });
+      } else {
+        seen.set(key, row.num);
+      }
+    }
+    res.json({ count: duplicates.length, duplicates });
+  } catch (err) {
+    log('ERROR', `GET /api/tracker/duplicates: ${err.message}`);
+    res.status(500).json({ error: 'Failed to check duplicates', detail: err.message });
   }
 });
 
@@ -1618,7 +1616,7 @@ app.get('/api/calendar', (req, res) => {
  * POST /api/research -- Deep research a company via Anthropic Claude
  * Body: { company: string }
  */
-app.post('/api/research', async (req, res) => {
+app.post('/api/research', apiProxyLimiter, async (req, res) => {
   try {
     const { company } = req.body;
     if (!company) {
@@ -1627,10 +1625,10 @@ app.post('/api/research', async (req, res) => {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured.' });
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not configured.', hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file, then restart the server.' });
     }
 
-    const profileContent = readSafe(PATHS.profile);
+    const profileContent = await readSafeAsync(PATHS.profile);
 
     const systemPrompt = `You are a career intelligence analyst. Research the company and provide strategic insights for a job candidate. Return your analysis as JSON with keys: company (string), summary (2-3 sentence overview), aiStrategy (their AI strategy and initiatives), culture (work culture and values), recentNews (recent notable news), glassdoor (estimated sentiment and rating), angle (how the candidate should position themselves for this company).`;
 
@@ -1655,7 +1653,7 @@ app.post('/api/research', async (req, res) => {
 
     if (!response.ok) {
       const errBody = await response.text();
-      return res.status(502).json({ error: 'Anthropic API error', detail: errBody });
+      return res.status(502).json({ error: 'Anthropic API request failed.', hint: 'This usually means the API key is invalid, expired, or rate-limited. Check your ANTHROPIC_API_KEY in .env and try again.', detail: errBody });
     }
 
     const data = await response.json();
@@ -1686,14 +1684,14 @@ const EDITABLE_FILES = {
   'story-bank': PATHS.storyBank,
 };
 
-app.get('/api/file/:name', (req, res) => {
+app.get('/api/file/:name', async (req, res) => {
   try {
     const name = req.params.name;
     const filePath = EDITABLE_FILES[name];
     if (!filePath) {
       return res.status(400).json({ error: `File "${name}" is not editable. Allowed: ${Object.keys(EDITABLE_FILES).join(', ')}` });
     }
-    const content = readSafe(filePath);
+    const content = await readSafeAsync(filePath);
     res.json({ content, path: filePath, name });
   } catch (err) {
     log('ERROR', `GET /api/file/${req.params.name}: ${err.message}`);
@@ -1705,7 +1703,7 @@ app.get('/api/file/:name', (req, res) => {
  * PUT /api/file/:name -- Write a whitelisted file
  * Body: { content: string }
  */
-app.put('/api/file/:name', (req, res) => {
+app.put('/api/file/:name', writeEndpointLimiter, async (req, res) => {
   try {
     const name = req.params.name;
     const filePath = EDITABLE_FILES[name];
@@ -1723,7 +1721,8 @@ app.put('/api/file/:name', (req, res) => {
     if (content.length > 512 * 1024) {
       return res.status(400).json({ error: 'Content too large. Maximum 500KB.' });
     }
-    writeFileSync(filePath, content, 'utf-8');
+    await writeFile(filePath, content, 'utf-8');
+    fileCache.invalidate(filePath);
     log('INFO', `Updated file: ${name} (${filePath})`);
     res.json({ success: true, name, path: filePath });
   } catch (err) {
@@ -1736,7 +1735,7 @@ app.put('/api/file/:name', (req, res) => {
  * POST /api/export-package -- Generate resume + cover letter + form answers for a role
  * Body: { roleId: number }
  */
-app.post('/api/export-package', async (req, res) => {
+app.post('/api/export-package', apiProxyLimiter, async (req, res) => {
   try {
     const { roleId } = req.body;
     if (!roleId) {
@@ -1745,12 +1744,14 @@ app.post('/api/export-package', async (req, res) => {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured.' });
+      return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not configured.', hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file, then restart the server.' });
     }
 
-    const cv = readSafe(PATHS.cv);
-    const articleDigest = readSafe(PATHS.articleDigest);
-    const trackerContent = readSafe(PATHS.tracker);
+    const [cv, articleDigest, trackerContent] = await Promise.all([
+      readSafeAsync(PATHS.cv),
+      readSafeAsync(PATHS.articleDigest),
+      readSafeAsync(PATHS.tracker),
+    ]);
     const trackerRows = parseTracker(trackerContent);
     const roleData = trackerRows.find(r => r.num === parseInt(roleId));
 
@@ -1781,7 +1782,7 @@ app.post('/api/export-package', async (req, res) => {
 
     if (!response.ok) {
       const errBody = await response.text();
-      return res.status(502).json({ error: 'Anthropic API error', detail: errBody });
+      return res.status(502).json({ error: 'Anthropic API request failed.', hint: 'This usually means the API key is invalid, expired, or rate-limited. Check your ANTHROPIC_API_KEY in .env and try again.', detail: errBody });
     }
 
     const data = await response.json();
@@ -1803,68 +1804,176 @@ app.post('/api/export-package', async (req, res) => {
 });
 
 /**
- * GET /api/recommendations -- Smart recommendations based on pipeline + tracker
+ * GET /api/recommendations -- Smart, multi-signal recommendations.
+ * Considers: score, tier, days since evaluation, materials generated,
+ * application status, and pipeline freshness. Each recommendation gets
+ * a composite priority score so the frontend can sort by impact.
  */
-app.get('/api/recommendations', (req, res) => {
+app.get('/api/recommendations', async (req, res) => {
   try {
-    const trackerContent = readSafe(PATHS.tracker);
-    const pipelineContent = readSafe(PATHS.pipeline);
+    const [trackerContent, pipelineContent, reportsDir, scanContent] = await Promise.all([
+      readSafeAsync(PATHS.tracker),
+      readSafeAsync(PATHS.pipeline),
+      readdir(PATHS.reportsDir).catch(() => []),
+      readSafeAsync(PATHS.scanHistory),
+    ]);
     const trackerRows = parseTracker(trackerContent);
     const pipelineEntries = parsePipeline(pipelineContent);
+    const scanRows = parseScanHistory(scanContent);
+    const today = new Date().toISOString().split('T')[0];
+
+    // Build a set of companies that have reports (= materials generated)
+    const reportSlugs = new Set();
+    for (const f of reportsDir) {
+      if (typeof f === 'string' && f.endsWith('.md')) {
+        const match = f.match(/^\d+-(.+)-\d{4}-\d{2}-\d{2}\.md$/);
+        if (match) reportSlugs.add(match[1].toLowerCase());
+      }
+    }
 
     const priorities = [];
 
-    // High-score evaluated but not applied
-    const highScoreUnapplied = trackerRows
-      .filter(r => {
-        const score = parseFloat(r.score) || 0;
-        const status = (r.status || '').toLowerCase();
-        return score >= 4.0 && status === 'evaluated';
-      })
-      .sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0))
-      .slice(0, 3);
+    // 1. High-score evaluated but not applied -- weighted by score, tier, and age
+    const evaluatedRows = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'evaluated';
+    });
 
-    for (const r of highScoreUnapplied) {
+    for (const r of evaluatedRows) {
+      const score = parseFloat(r.score) || 0;
+      if (score < 3.0) continue; // Skip low-fit roles entirely
+
+      const tier = classifyTier(r.role || '');
+      const daysOld = r.date ? Math.round((Date.now() - new Date(r.date).getTime()) / 86400000) : 0;
+      const companySlug = (r.company || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const hasMaterials = reportSlugs.has(companySlug);
+
+      // Composite priority: higher score = better, c-suite > director > other,
+      // fresher is better (decay factor), having materials means closer to ready
+      let priority = score * 10;
+      if (tier === 'c-suite') priority += 15;
+      else if (tier === 'director') priority += 8;
+      // Decay: lose 1 point per day after 7 days (stale evaluations need attention)
+      if (daysOld > 7) priority -= (daysOld - 7) * 0.5;
+      // Bonus for having materials already generated
+      if (hasMaterials) priority += 5;
+
+      const urgencyLabel = score >= 4.5 ? 'critical' : score >= 4.0 ? 'high' : 'medium';
+
+      let reason = `Score ${r.score}`;
+      if (tier === 'c-suite') reason += ' (C-suite)';
+      else if (tier === 'director') reason += ' (Director-level)';
+      reason += ' -- strong fit, application not yet submitted';
+      if (daysOld > 7) reason += ` (evaluated ${daysOld} days ago, may be expiring)`;
+      if (hasMaterials) reason += ' [materials ready]';
+      else reason += ' [needs resume/cover letter]';
+
       priorities.push({
-        company: r.company, title: r.role,
-        reason: `Score ${r.score} -- strong fit, application not yet submitted`,
-        urgency: 'high'
+        company: r.company, title: r.role, score,
+        tier, daysOld, hasMaterials,
+        reason, urgency: urgencyLabel,
+        priorityScore: Math.round(priority * 10) / 10,
       });
     }
 
-    // Responded/interview -- need follow-up
+    // 2. Responded/interview -- need follow-up (highest urgency)
     const needFollowUp = trackerRows.filter(r => {
       const status = (r.status || '').toLowerCase();
       return status === 'responded' || status === 'interview';
-    }).slice(0, 3);
+    });
 
     for (const r of needFollowUp) {
+      const daysOld = r.date ? Math.round((Date.now() - new Date(r.date).getTime()) / 86400000) : 0;
+      const isInterview = (r.status || '').toLowerCase() === 'interview';
       priorities.push({
         company: r.company, title: r.role,
-        reason: `Status: ${r.status} -- keep momentum, prepare or follow up`,
-        urgency: 'high'
+        score: parseFloat(r.score) || 0,
+        tier: classifyTier(r.role || ''),
+        daysOld,
+        hasMaterials: true,
+        reason: isInterview
+          ? `In interview process -- prepare thoroughly and follow up promptly`
+          : `Company responded ${daysOld > 0 ? daysOld + ' days ago' : ''} -- maintain momentum`,
+        urgency: 'critical',
+        priorityScore: 100 + (isInterview ? 20 : 0), // Always at the top
       });
     }
 
-    // Pipeline C-suite roles not yet evaluated
-    const csuiteInPipeline = pipelineEntries
-      .filter(e => {
-        const title = (e.title || e.role || '').toLowerCase();
-        return /\b(vp|chief|caio|cto|cio)\b/.test(title) && !e.done;
-      })
-      .slice(0, 3);
+    // 3. Applied > 5 days ago -- overdue follow-ups
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0];
+    const overdueApps = trackerRows.filter(r => {
+      const status = (r.status || '').toLowerCase();
+      return status === 'applied' && r.date && r.date <= fiveDaysAgo;
+    });
 
-    for (const e of csuiteInPipeline) {
+    for (const r of overdueApps) {
+      const daysOld = Math.round((Date.now() - new Date(r.date).getTime()) / 86400000);
       priorities.push({
-        company: e.company || 'Unknown', title: e.title || e.role || 'C-Suite Role',
-        reason: 'C-suite pipeline entry awaiting evaluation',
-        urgency: 'medium'
+        company: r.company, title: r.role,
+        score: parseFloat(r.score) || 0,
+        tier: classifyTier(r.role || ''),
+        daysOld,
+        hasMaterials: true,
+        reason: `Applied ${daysOld} days ago with no response -- send a follow-up email`,
+        urgency: 'high',
+        priorityScore: 70 + Math.min(daysOld, 20),
       });
     }
 
-    const weeklyGoals = `Focus areas: ${highScoreUnapplied.length} applications to submit, ${needFollowUp.length} follow-ups pending, ${csuiteInPipeline.length} C-suite roles to evaluate. Target: 3-5 quality applications this week.`;
+    // 4. Pipeline C-suite/director roles not yet evaluated
+    const unevaluatedPipeline = pipelineEntries
+      .filter(e => !e.done)
+      .map(e => {
+        const title = e.title || e.role || '';
+        const tier = classifyTier(title);
+        return { ...e, title, tier };
+      })
+      .filter(e => e.tier === 'c-suite' || e.tier === 'director')
+      .slice(0, 5);
 
-    res.json({ priorities, weeklyGoals });
+    for (const e of unevaluatedPipeline) {
+      priorities.push({
+        company: e.company || 'Unknown', title: e.title || 'Unknown Role',
+        score: 0, tier: e.tier,
+        daysOld: 0, hasMaterials: false,
+        reason: `${e.tier === 'c-suite' ? 'C-suite' : 'Director-level'} pipeline entry awaiting evaluation`,
+        urgency: 'medium',
+        priorityScore: e.tier === 'c-suite' ? 45 : 30,
+      });
+    }
+
+    // Sort all priorities by composite score (descending)
+    priorities.sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+
+    // Generate weekly goals summary
+    const appliedCount = trackerRows.filter(r => (r.status || '').toLowerCase() === 'applied').length;
+    const interviewCount = needFollowUp.filter(r => (r.status || '').toLowerCase() === 'interview').length;
+    const highScoreReady = evaluatedRows.filter(r => (parseFloat(r.score) || 0) >= 4.0).length;
+    const lastScan = scanRows.length > 0 ? scanRows[scanRows.length - 1].date : null;
+    const daysSinceScan = lastScan ? Math.round((Date.now() - new Date(lastScan).getTime()) / 86400000) : null;
+
+    let weeklyGoals = `Focus areas: `;
+    const goals = [];
+    if (interviewCount > 0) goals.push(`${interviewCount} active interview${interviewCount > 1 ? 's' : ''} (top priority)`);
+    if (overdueApps.length > 0) goals.push(`${overdueApps.length} follow-up${overdueApps.length > 1 ? 's' : ''} overdue`);
+    if (highScoreReady > 0) goals.push(`${highScoreReady} high-score role${highScoreReady > 1 ? 's' : ''} ready to apply`);
+    if (unevaluatedPipeline.length > 0) goals.push(`${unevaluatedPipeline.length} senior roles to evaluate`);
+    if (daysSinceScan && daysSinceScan >= 3) goals.push(`scan is ${daysSinceScan} days stale`);
+    weeklyGoals += goals.length > 0 ? goals.join(', ') : 'pipeline is in good shape';
+    weeklyGoals += `. Target: 3-5 quality applications this week.`;
+
+    res.json({
+      priorities: priorities.slice(0, 15), // Cap at 15 recommendations
+      weeklyGoals,
+      stats: {
+        totalTracked: trackerRows.length,
+        applied: appliedCount,
+        interviews: interviewCount,
+        overdueFollowUps: overdueApps.length,
+        pipelineSize: pipelineEntries.filter(e => !e.done).length,
+        daysSinceScan,
+      },
+    });
   } catch (err) {
     log('ERROR', `GET /api/recommendations: ${err.message}`);
     res.status(500).json({ error: 'Recommendations failed', detail: err.message });
@@ -1875,14 +1984,14 @@ app.get('/api/recommendations', (req, res) => {
  * POST /api/stories -- Add a STAR story to interview-prep/story-bank.md
  * Body: { situation, task, action, result, reflection, tags }
  */
-app.post('/api/stories', (req, res) => {
+app.post('/api/stories', writeEndpointLimiter, async (req, res) => {
   try {
     const { situation, task, action, result, reflection, tags } = req.body;
     if (!situation || !task || !action || !result) {
       return res.status(400).json({ error: 'situation, task, action, and result are required' });
     }
 
-    let content = readSafe(PATHS.storyBank);
+    let content = await readSafeAsync(PATHS.storyBank);
 
     // If file is empty or doesn't exist, create the structure
     if (!content.trim()) {
@@ -1894,7 +2003,7 @@ app.post('/api/stories', (req, res) => {
     const storyEntry = `\n## Story: ${situation.substring(0, 60)}\n\n${tagStr}**Situation:** ${situation}\n\n**Task:** ${task}\n\n**Action:** ${action}\n\n**Result:** ${result}\n\n**Reflection:** ${reflection || 'N/A'}\n\n---\n`;
 
     content += storyEntry;
-    writeFileSync(PATHS.storyBank, content, 'utf-8');
+    await writeFile(PATHS.storyBank, content, 'utf-8');
 
     log('INFO', `Added new STAR story to story bank`);
     res.json({ success: true });
@@ -1909,39 +2018,75 @@ app.post('/api/stories', (req, res) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/memory
-app.get('/api/memory', (req, res) => {
+app.get('/api/memory', async (req, res) => {
   const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-  try {
-    const data = JSON.parse(readFileSync(memoryPath, 'utf-8'));
-    res.json(data);
-  } catch {
-    res.json({ careerFacts: [], preferences: [], actionItems: [], conversations: [] });
-  }
+  const defaultMemory = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+  const data = await readJsonSafeAsync(memoryPath, defaultMemory);
+  res.json(data);
 });
 
 // POST /api/memory -- save a memory entry
-app.post('/api/memory', (req, res) => {
+app.post('/api/memory', writeEndpointLimiter, async (req, res) => {
   const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-  let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-  try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+  const defaultMemory = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+  const memories = await readJsonSafeAsync(memoryPath, defaultMemory);
 
   const { type, data } = req.body; // type: 'careerFact', 'preference', 'actionItem', 'conversation'
-  if (type === 'careerFact') memories.careerFacts.push({ ...data, date: new Date().toISOString().split('T')[0] });
-  else if (type === 'preference') memories.preferences.push(data);
-  else if (type === 'actionItem') memories.actionItems.push({ ...data, status: 'pending', date: new Date().toISOString().split('T')[0] });
-  else if (type === 'conversation') memories.conversations.push({ ...data, date: new Date().toISOString().split('T')[0] });
 
-  writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
-  res.json({ success: true });
+  // Validate type
+  const validTypes = ['careerFact', 'preference', 'actionItem', 'conversation'];
+  if (!type || !validTypes.includes(type)) {
+    return res.status(400).json({ error: `Invalid type. Must be one of: ${validTypes.join(', ')}` });
+  }
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ error: 'data must be an object' });
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  let deduplicated = false;
+  if (type === 'careerFact') {
+    const content = data.content || '';
+    if (isMemoryDuplicate(memories.careerFacts.map(f => f.content), content)) {
+      deduplicated = true;
+    } else {
+      memories.careerFacts.push({ ...data, date: today });
+    }
+  } else if (type === 'preference') {
+    // Replace existing preference with same key
+    const key = data.key || '';
+    const existingIdx = key ? memories.preferences.findIndex(p => p.key === key) : -1;
+    if (existingIdx >= 0) {
+      memories.preferences[existingIdx] = { ...data, date: today };
+    } else {
+      memories.preferences.push(data);
+    }
+  } else if (type === 'actionItem') {
+    const action = data.action || '';
+    if (isMemoryDuplicate(memories.actionItems.filter(a => a.status === 'pending').map(a => a.action), action)) {
+      deduplicated = true;
+    } else {
+      memories.actionItems.push({ ...data, status: 'pending', date: today });
+    }
+  } else if (type === 'conversation') {
+    memories.conversations.push({ ...data, date: today });
+  }
+
+  if (!deduplicated) {
+    await writeFile(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
+  }
+  res.json({ success: true, deduplicated });
 });
 
 // POST /api/memory/extract -- use Claude to extract facts from conversation
-app.post('/api/memory/extract', async (req, res) => {
+app.post('/api/memory/extract', apiProxyLimiter, async (req, res) => {
   const { messages } = req.body; // array of { role, text }
   if (!messages?.length) return res.json({ facts: [], actions: [] });
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+  if (!anthropicKey) return res.status(503).json({
+    error: 'ANTHROPIC_API_KEY is not configured.',
+    hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file, then restart the server.',
+  });
 
   const transcript = messages.map(m => `${m.role}: ${m.text}`).join('\n');
 
@@ -1969,19 +2114,35 @@ app.post('/api/memory/extract', async (req, res) => {
 
     // Save extracted facts to memory
     const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-    let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-    try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+    const defaultMemory = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
+    const memories = await readJsonSafeAsync(memoryPath, defaultMemory);
 
     const today = new Date().toISOString().split('T')[0];
+    let factsAdded = 0;
+    let actionsAdded = 0;
     if (extracted.facts) {
-      extracted.facts.forEach(f => memories.careerFacts.push({ ...f, date: today, applied: false }));
+      const existingContents = memories.careerFacts.map(f => f.content);
+      for (const f of extracted.facts) {
+        if (!isMemoryDuplicate(existingContents, f.content)) {
+          memories.careerFacts.push({ ...f, date: today, applied: false });
+          existingContents.push(f.content);
+          factsAdded++;
+        }
+      }
     }
     if (extracted.actions) {
-      extracted.actions.forEach(a => memories.actionItems.push({ ...a, status: 'pending', date: today }));
+      const existingActions = memories.actionItems.filter(a => a.status === 'pending').map(a => a.action);
+      for (const a of extracted.actions) {
+        if (!isMemoryDuplicate(existingActions, a.action)) {
+          memories.actionItems.push({ ...a, status: 'pending', date: today });
+          existingActions.push(a.action);
+          actionsAdded++;
+        }
+      }
     }
 
-    writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
-    res.json({ extracted, saved: true });
+    await writeFile(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
+    res.json({ extracted, saved: true, factsAdded, actionsAdded, deduplicatedFacts: (extracted.facts?.length || 0) - factsAdded, deduplicatedActions: (extracted.actions?.length || 0) - actionsAdded });
   } catch (err) {
     log('ERROR', `Memory extraction failed: ${err.message}`);
     res.status(500).json({ error: err.message });
@@ -1989,10 +2150,13 @@ app.post('/api/memory/extract', async (req, res) => {
 });
 
 // PATCH /api/memory/:index -- update action item status
-app.patch('/api/memory/:index', (req, res) => {
+app.patch('/api/memory/:index', writeEndpointLimiter, async (req, res) => {
   const memoryPath = join(ROOT, 'data', 'agent-memory.json');
   try {
-    const memories = JSON.parse(readFileSync(memoryPath, 'utf-8'));
+    const memories = await readJsonSafeAsync(memoryPath, null);
+    if (!memories) {
+      return res.status(404).json({ error: 'Memory file not found' });
+    }
     const idx = parseInt(req.params.index);
     if (isNaN(idx) || idx < 0) {
       return res.status(400).json({ error: 'Invalid index' });
@@ -2005,7 +2169,7 @@ app.patch('/api/memory/:index', (req, res) => {
           memories.actionItems[idx][key] = req.body[key];
         }
       }
-      writeFileSync(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
+      await writeFile(memoryPath, JSON.stringify(memories, null, 2), 'utf-8');
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Action item not found' });
@@ -2016,12 +2180,25 @@ app.patch('/api/memory/:index', (req, res) => {
 });
 
 // POST /api/conversation/save -- save conversation log (async to avoid blocking)
-app.post('/api/conversation/save', async (req, res) => {
+app.post('/api/conversation/save', writeEndpointLimiter, async (req, res) => {
   try {
     const { messages } = req.body;
+
+    // Validate input
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'messages must be an array' });
+    }
+    if (messages.length === 0) {
+      return res.status(400).json({ error: 'messages array must not be empty' });
+    }
+    // Cap messages per save to prevent abuse
+    if (messages.length > 200) {
+      return res.status(400).json({ error: 'Too many messages. Maximum 200 per save.' });
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const dir = join(ROOT, 'data', 'conversations');
-    if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+    try { await mkdir(dir, { recursive: true }); } catch {}
     const filePath = join(dir, `${today}.json`);
 
     // Append to existing day's conversation
@@ -2040,8 +2217,13 @@ app.post('/api/conversation/save', async (req, res) => {
 // GET /api/conversation/latest -- get latest conversation (async to avoid blocking)
 app.get('/api/conversation/latest', async (req, res) => {
   const dir = join(ROOT, 'data', 'conversations');
-  if (!existsSync(dir)) return res.json({ messages: [] });
-  const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort().reverse();
+  let files;
+  try {
+    const dirFiles = await readdir(dir);
+    files = dirFiles.filter(f => f.endsWith('.json')).sort().reverse();
+  } catch {
+    return res.json({ messages: [] });
+  }
   if (!files.length) return res.json({ messages: [] });
   try {
     const content = await readFile(join(dir, files[0]), 'utf-8');
@@ -2058,39 +2240,77 @@ app.get('/api/conversation/latest', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const CLAUDE_TOOLS = [
-  { name: 'scan_portals', description: 'Scan job portals to discover new matching offers. Checks Greenhouse APIs and tracked companies.', input_schema: { type: 'object', properties: {} } },
-  { name: 'evaluate_job', description: 'Evaluate a job description by URL or pasted text.', input_schema: { type: 'object', properties: { url: { type: 'string' }, text: { type: 'string' } } } },
-  { name: 'generate_resume', description: 'Generate a tailored resume for a specific company/role.', input_schema: { type: 'object', properties: { company: { type: 'string' }, role: { type: 'string' } }, required: ['company'] } },
-  { name: 'generate_cover_letter', description: 'Generate a tailored cover letter for a specific role.', input_schema: { type: 'object', properties: { company: { type: 'string' }, role: { type: 'string' } }, required: ['company'] } },
-  { name: 'draft_email', description: 'Draft an email (follow-up, thank you, outreach, etc.)', input_schema: { type: 'object', properties: { recipient: { type: 'string' }, purpose: { type: 'string' }, company: { type: 'string' } }, required: ['purpose'] } },
-  { name: 'verify_listing', description: 'Check if a job listing URL is still active.', input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
-  { name: 'research_company', description: 'Deep research a company: AI strategy, culture, news, Glassdoor, positioning angle.', input_schema: { type: 'object', properties: { company: { type: 'string' } }, required: ['company'] } },
-  { name: 'update_application_status', description: 'Update the status of a tracked application.', input_schema: { type: 'object', properties: { company: { type: 'string' }, status: { type: 'string', enum: ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP'] } }, required: ['company', 'status'] } },
-  { name: 'save_memory', description: 'Save an important fact, preference, or action item to persistent memory.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ['careerFact','preference','actionItem'] }, content: { type: 'string' } }, required: ['type', 'content'] } },
-  { name: 'add_story', description: 'Add a STAR interview story to the story bank.', input_schema: { type: 'object', properties: { situation: { type: 'string' }, task: { type: 'string' }, action: { type: 'string' }, result: { type: 'string' }, reflection: { type: 'string' } }, required: ['situation','task','action','result'] } },
-  { name: 'get_pipeline', description: 'Get the current list of job offers in the pipeline.', input_schema: { type: 'object', properties: {} } },
-  { name: 'get_tracker', description: 'Get the current applications tracker.', input_schema: { type: 'object', properties: {} } },
-  { name: 'get_recommendations', description: 'Get smart recommendations for what to prioritize this week.', input_schema: { type: 'object', properties: {} } },
+  { name: 'scan_portals', description: 'Scan all configured job portals (Greenhouse APIs, tracked companies in portals.yml) to discover new matching offers. Adds new entries to data/pipeline.md. Use when the user asks to find new jobs, refresh the pipeline, or check for new postings.', input_schema: { type: 'object', properties: {} } },
+  { name: 'evaluate_job', description: 'Evaluate a job description against the user profile using the 10-dimension Career-OS scoring system (North Star alignment, CV match, seniority, comp, growth, remote, reputation, tech stack, time-to-offer, culture). Accepts a URL to fetch or raw JD text. Returns score (1-5), summary, full report, and archetype. Use when the user pastes a job URL/description or asks you to assess a role.', input_schema: { type: 'object', properties: { url: { type: 'string', description: 'URL of the job posting to fetch and evaluate' }, text: { type: 'string', description: 'Raw job description text if no URL available' } } } },
+  { name: 'generate_resume', description: 'Generate an ATS-optimized, tailored resume in markdown for a specific company and role. Uses cv.md and article-digest.md as source material and adapts emphasis to match the target role. Use when the user asks for a resume, CV, or application materials.', input_schema: { type: 'object', properties: { company: { type: 'string', description: 'Target company name' }, role: { type: 'string', description: 'Target role title' } }, required: ['company'] } },
+  { name: 'generate_cover_letter', description: 'Generate a concise, compelling cover letter (max 400 words) connecting the user experience to a specific role. Leads with value, uses proof points and metrics. Use when the user asks for a cover letter or application letter.', input_schema: { type: 'object', properties: { company: { type: 'string', description: 'Target company name' }, role: { type: 'string', description: 'Target role title' } }, required: ['company'] } },
+  { name: 'draft_email', description: 'Draft a professional email for job search communication: follow-ups after applying, thank-you notes after interviews, responses to recruiters, cold outreach, or networking messages. Use when the user asks to write or draft any email related to their job search.', input_schema: { type: 'object', properties: { recipient: { type: 'string', description: 'Who the email is to (name, title, or role like "recruiter")' }, purpose: { type: 'string', description: 'Purpose: follow-up, thank-you, cold-outreach, response, networking, negotiation, etc.' }, company: { type: 'string', description: 'Company name for context' } }, required: ['purpose'] } },
+  { name: 'verify_listing', description: 'Check whether a specific job listing URL is still active or has been taken down/filled. Fetches the page and checks for closed indicators (e.g., "position has been filled") vs active indicators (e.g., "Apply Now"). Use when the user asks if a job is still open.', input_schema: { type: 'object', properties: { url: { type: 'string', description: 'Full URL of the job posting to verify' } }, required: ['url'] } },
+  { name: 'research_company', description: 'Deep-dive research on a company: AI strategy, engineering culture, recent news, Glassdoor sentiment estimate, and a strategic angle for how the user should position themselves. Use when the user asks about a company, wants to prepare for an interview, or wants competitive intelligence.', input_schema: { type: 'object', properties: { company: { type: 'string', description: 'Company name to research' } }, required: ['company'] } },
+  { name: 'update_application_status', description: 'Update the status of a tracked application in data/applications.md. Finds the application by company name and sets the new canonical status. Use when the user reports progress (e.g., "I applied to Google", "got rejected from Meta", "have an interview at OpenAI").', input_schema: { type: 'object', properties: { company: { type: 'string', description: 'Company name to find in the tracker' }, status: { type: 'string', description: 'New status', enum: ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP'] } }, required: ['company', 'status'] } },
+  { name: 'save_memory', description: 'Save an important career fact, user preference, or action item to persistent memory (data/agent-memory.json). Career facts persist across sessions and appear in the system prompt. Use proactively when the user shares new information about their career, preferences, or tasks to remember.', input_schema: { type: 'object', properties: { type: { type: 'string', description: 'Category of memory', enum: ['careerFact','preference','actionItem'] }, content: { type: 'string', description: 'What to remember (be specific and concise)' } }, required: ['type', 'content'] } },
+  { name: 'add_story', description: 'Add a STAR+R (Situation, Task, Action, Result + Reflection) interview story to the story bank (interview-prep/story-bank.md). These stories are used for interview preparation and roleplay. Use when the user shares an accomplishment, experience, or asks to build their story library.', input_schema: { type: 'object', properties: { situation: { type: 'string', description: 'The context/background of the situation' }, task: { type: 'string', description: 'The challenge or responsibility' }, action: { type: 'string', description: 'Specific actions taken (use "I" not "we")' }, result: { type: 'string', description: 'Quantified outcomes and impact' }, reflection: { type: 'string', description: 'Lessons learned or what you would do differently' } }, required: ['situation','task','action','result'] } },
+  { name: 'get_pipeline', description: 'Get the current pipeline of job offers from data/pipeline.md. Returns count and top 5 entries with company, title, and tier (c-suite/director/other). Use when the user asks what jobs are in their pipeline or wants to see available opportunities.', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_tracker', description: 'Get the current applications tracker from data/applications.md. Returns count and up to 10 entries with company, role, status, and score. Use when the user asks about their application status, progress, or tracked roles.', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_recommendations', description: 'Get smart, prioritized recommendations based on current pipeline and tracker state. Identifies high-score unapplied roles, pending follow-ups, and C-suite pipeline entries. Use when the user asks what to focus on, wants guidance, or says "what should I do next?"', input_schema: { type: 'object', properties: {} } },
 ];
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', apiProxyLimiter, async (req, res) => {
   const { message, history } = req.body;
-  if (!message) return res.status(400).json({ error: 'Message required' });
+  if (!message) return res.status(400).json({
+    error: 'Message is required.',
+    hint: 'Send a JSON body with { "message": "your question", "history": [] }.',
+  });
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
+  if (!anthropicKey) return res.status(503).json({
+    error: 'ANTHROPIC_API_KEY is not configured.',
+    hint: 'Add ANTHROPIC_API_KEY=sk-ant-... to your .env file in the project root, then restart the server.',
+  });
 
-  // Build context
-  const cvContent = readSafe(join(ROOT, 'cv.md')).slice(0, 3000);
-  const pipelineContent = readSafe(PATHS.pipeline);
-  const pipelineCount = (pipelineContent.match(/^- \[/gm) || []).length;
-  const trackerContent = readSafe(PATHS.tracker);
-  const appCount = (trackerContent.match(/^\|\s*\d+/gm) || []).length;
-  const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-  let memories = { careerFacts: [], preferences: [], actionItems: [] };
-  try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+  // Build context (async parallel reads)
+  const chatMemoryPath = join(ROOT, 'data', 'agent-memory.json');
+  const [cvContent, chatPipelineContent, chatTrackerContent, memories] = await Promise.all([
+    readSafeAsync(join(ROOT, 'cv.md')).then(c => c.slice(0, 3000)),
+    readSafeAsync(PATHS.pipeline),
+    readSafeAsync(PATHS.tracker),
+    readJsonSafeAsync(chatMemoryPath, { careerFacts: [], preferences: [], actionItems: [] }),
+  ]);
+  const pipelineCount = (chatPipelineContent.match(/^- \[/gm) || []).length;
+  const appCount = (chatTrackerContent.match(/^\|\s*\d+/gm) || []).length;
 
-  const systemPrompt = `You are Career-OS, Stephen C. Webster's AI career coach. You are direct, warm, and action-oriented. You have TOOLS -- use them whenever Stephen asks you to DO something. Don't say you can't do things -- you CAN scan for jobs, generate resumes, research companies, etc. Just call the tool.
+  // Conversation summarization: when history exceeds 20 messages,
+  // summarize older messages into a compact context block so the model
+  // retains context without hitting token limits.
+  let conversationSummary = '';
+  let recentHistory = [];
+  if (history && Array.isArray(history) && history.length > 20) {
+    const olderMessages = history.slice(0, -10);
+    recentHistory = history.slice(-10);
+    // Build a compact summary of older messages
+    conversationSummary = summarizeConversationHistory(olderMessages);
+  } else if (history && Array.isArray(history)) {
+    recentHistory = history.slice(-10);
+  }
+
+  const systemPrompt = `You are Career-OS, Stephen C. Webster's AI career coach. Direct, warm, action-oriented.
+
+TOOLS: You have 13 tools. Use them IMMEDIATELY when Stephen asks you to do something -- do not describe what you would do; do it.
+
+TOOL ROUTING:
+- Job URL or description pasted -> evaluate_job
+- "Find jobs" / "Scan" / "What's new?" -> scan_portals
+- "Resume for X" / "CV for X" -> generate_resume
+- "Cover letter for X" -> generate_cover_letter
+- "Draft email" / "Follow up" / "Thank you" -> draft_email
+- "Is this still open?" -> verify_listing
+- "Tell me about [company]" / "Research X" -> research_company
+- "I applied" / "Got rejected" / status change -> update_application_status
+- Shares new career fact -> save_memory (proactively, without asking)
+- Shares accomplishment with STAR elements -> add_story
+- "What's in my pipeline?" -> get_pipeline
+- "Show tracker" / "My applications" -> get_tracker
+- "What should I do?" / "Priorities" -> get_recommendations
 
 STEPHEN'S BACKGROUND:
 ${cvContent.slice(0, 2000)}
@@ -2099,15 +2319,20 @@ CURRENT STATUS: ${pipelineCount} offers in pipeline, ${appCount} applications tr
 
 ${memories.careerFacts?.length ? 'KNOWN FACTS:\n' + memories.careerFacts.map(f => '- ' + f.content).join('\n') : ''}
 ${memories.actionItems?.filter(a => a.status === 'pending').length ? 'PENDING ACTIONS:\n' + memories.actionItems.filter(a => a.status === 'pending').map(a => '- ' + a.action).join('\n') : ''}
+${conversationSummary ? '\nEARLIER CONVERSATION CONTEXT:\n' + conversationSummary : ''}
 
-Be concise. Be actionable. When asked to do something, use your tools immediately -- don't ask for permission or more info unless genuinely needed.`;
+RULES:
+- Call tools immediately. Never say "I can't" -- you can.
+- Do not ask for permission unless the request is genuinely ambiguous.
+- When Stephen shares a career fact or preference, save it with save_memory proactively.
+- Keep responses concise. Lead with the action or answer, then explain briefly if needed.
+- If a tool call fails, explain the error and suggest a specific fix.
+- When multiple tools are needed (e.g., research + generate), chain them in sequence.`;
 
-  // Build messages from history
+  // Build messages from recent history (last 10 messages + current)
   const messages = [];
-  if (history && Array.isArray(history)) {
-    for (const msg of history.slice(-10)) {
-      messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.text || msg.content || '' });
-    }
+  for (const msg of recentHistory) {
+    messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.text || msg.content || '' });
   }
   messages.push({ role: 'user', content: message });
 
@@ -2158,21 +2383,26 @@ Be concise. Be actionable. When asked to do something, use your tools immediatel
         log('INFO', `Chat tool call: ${tool.name}(${JSON.stringify(tool.input).slice(0, 80)})`);
         actionsTaken.push(tool.name);
         const result = await executeToolCall(tool.name, tool.input || {});
+        const isError = result && typeof result === 'object' && 'error' in result;
         toolResultContent.push({
           type: 'tool_result',
           tool_use_id: tool.id,
-          content: JSON.stringify(result).slice(0, 4000)
+          content: JSON.stringify(result).slice(0, 4000),
+          ...(isError ? { is_error: true } : {}),
         });
+        if (isError) {
+          log('WARN', `Chat tool ${tool.name} returned error: ${result.error}`);
+        }
       }
 
       messages.push({ role: 'user', content: toolResultContent });
     }
 
     // If we hit max rounds, return what we have
-    res.json({ response: 'Completed ' + actionsTaken.length + ' actions: ' + actionsTaken.join(', '), actions: actionsTaken });
+    res.json({ response: 'Completed ' + actionsTaken.length + ' actions: ' + actionsTaken.join(', '), actions: actionsTaken, truncated: true });
   } catch (err) {
     log('ERROR', `Chat error: ${err.message}`);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Chat request failed.', hint: 'This may be a temporary API issue. Try again in a few seconds. If it persists, check that your ANTHROPIC_API_KEY is valid.', detail: err.message });
   }
 });
 
@@ -2184,12 +2414,16 @@ Be concise. Be actionable. When asked to do something, use your tools immediatel
  * GET /api/briefing -- Daily morning briefing with pipeline summary,
  * overdue follow-ups, action items, recommendations, and smart suggestion.
  */
-app.get('/api/briefing', (req, res) => {
+app.get('/api/briefing', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. Pipeline data
-    const pipelineContent = readSafe(PATHS.pipeline);
+    // 1. Pipeline data (async)
+    const [pipelineContent, scanContent, trackerContent] = await Promise.all([
+      readSafeAsync(PATHS.pipeline),
+      readSafeAsync(PATHS.scanHistory),
+      readSafeAsync(PATHS.tracker),
+    ]);
     const pipelineEntries = parsePipeline(pipelineContent);
     const cSuite = pipelineEntries.filter(e => {
       const title = (e.title || e.role || '').toLowerCase();
@@ -2201,7 +2435,6 @@ app.get('/api/briefing', (req, res) => {
     }).length;
 
     // Count offers added in the last 24 hours (approximate by checking scan history)
-    const scanContent = readSafe(PATHS.scanHistory);
     const scanRows = parseScanHistory(scanContent);
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     const new24h = scanRows.filter(r => r.date >= yesterday).length;
@@ -2212,7 +2445,6 @@ app.get('/api/briefing', (req, res) => {
       : 7;
 
     // 2. Tracker data
-    const trackerContent = readSafe(PATHS.tracker);
     const trackerRows = parseTracker(trackerContent);
 
     // Overdue follow-ups: Applied > 5 days ago
@@ -2249,10 +2481,9 @@ app.get('/api/briefing', (req, res) => {
         date: r.date,
       }));
 
-    // 3. Agent memory (action items)
+    // 3. Agent memory (action items) -- async
     const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-    let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-    try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+    const memories = await readJsonSafeAsync(memoryPath, { careerFacts: [], preferences: [], actionItems: [], conversations: [] });
     const actionItems = (memories.actionItems || []).filter(a => a.status === 'pending').map(a => ({
       action: a.action || '',
       date: a.date || '',
@@ -2297,8 +2528,8 @@ app.get('/api/briefing', (req, res) => {
       });
     }
 
-    // 6. Dynamic suggestion
-    const profileContent = readSafe(PATHS.profile);
+    // 6. Dynamic suggestion (async)
+    const profileContent = await readSafeAsync(PATHS.profile);
     const profileFlat = parseSimpleYaml(profileContent);
     const firstName = (profileFlat['candidate.full_name'] || 'there').split(' ')[0];
     const hour = new Date().getHours();
@@ -2355,7 +2586,7 @@ app.get('/api/briefing', (req, res) => {
  * POST /api/workflow/full-pipeline -- Scan, evaluate top N, generate materials for best.
  * Body: { count: 5 }
  */
-app.post('/api/workflow/full-pipeline', async (req, res) => {
+app.post('/api/workflow/full-pipeline', apiProxyLimiter, async (req, res) => {
   try {
     const count = Math.min(parseInt(req.body.count) || 5, 10);
     const base = `http://localhost:${PORT}`;
@@ -2371,12 +2602,12 @@ app.post('/api/workflow/full-pipeline', async (req, res) => {
     }
 
     // Step 2: Read pipeline and pick top N by tier
-    const pipelineContent = readSafe(PATHS.pipeline);
+    const pipelineContent = await readSafeAsync(PATHS.pipeline);
     const entries = parsePipeline(pipelineContent).filter(e => !e.done);
     const sorted = entries.sort((a, b) => {
       const tierOrder = { 'c-suite': 0, 'director': 1, 'other': 2 };
-      const ta = a.tier || (classifyTierServer(a.title || a.role || '') );
-      const tb = b.tier || (classifyTierServer(b.title || b.role || '') );
+      const ta = a.tier || classifyTier(a.title || a.role || '');
+      const tb = b.tier || classifyTier(b.title || b.role || '');
       return (tierOrder[ta] || 2) - (tierOrder[tb] || 2);
     });
     const topN = sorted.slice(0, count);
@@ -2445,13 +2676,21 @@ app.post('/api/workflow/full-pipeline', async (req, res) => {
 /**
  * POST /api/workflow/interview-prep -- Complete interview prep package.
  * Body: { company: string, role: string }
+ *
+ * Returns: company research, general interview prep, company-specific
+ * behavioral questions based on company culture + candidate background,
+ * and relevant STAR stories from the story bank.
  */
-app.post('/api/workflow/interview-prep', async (req, res) => {
+app.post('/api/workflow/interview-prep', apiProxyLimiter, async (req, res) => {
   try {
     const { company, role } = req.body;
-    if (!company) return res.status(400).json({ error: 'Company name is required' });
+    if (!company) return res.status(400).json({
+      error: 'Company name is required.',
+      hint: 'Send { "company": "Anthropic", "role": "Solutions Architect" }',
+    });
 
     const base = `http://localhost:${PORT}`;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
 
     // Step 1: Research company
     log('INFO', `[Workflow] Interview prep: researching ${company}...`);
@@ -2467,7 +2706,7 @@ app.post('/api/workflow/interview-prep', async (req, res) => {
       log('WARN', `[Workflow] Research failed: ${e.message}`);
     }
 
-    // Step 2: Generate interview prep
+    // Step 2: Generate interview prep (general technical + behavioral)
     log('INFO', `[Workflow] Generating interview prep for ${company}...`);
     let prepContent = '';
     try {
@@ -2482,8 +2721,58 @@ app.post('/api/workflow/interview-prep', async (req, res) => {
       log('WARN', `[Workflow] Prep generation failed: ${e.message}`);
     }
 
-    // Step 3: Pull relevant STAR stories
-    const storyContent = readSafe(PATHS.storyBank);
+    // Step 3: Generate company-specific behavioral questions
+    // Uses the research data (culture, AI strategy) + candidate CV to
+    // generate questions that probe fit for THIS specific company.
+    let behavioralQuestions = [];
+    if (apiKey && (research.culture || research.aiStrategy)) {
+      log('INFO', `[Workflow] Generating company-specific behavioral questions for ${company}...`);
+      try {
+        const cvContent = await readSafeAsync(PATHS.cv);
+        const behavioralPrompt = `You are an interview coach. Based on this company's culture and the candidate's background, generate 8 behavioral interview questions that this company would likely ask. For each question, provide a brief coaching note on which STAR story elements to emphasize.
+
+COMPANY: ${company}
+ROLE: ${role || 'Senior role'}
+COMPANY CULTURE: ${research.culture || 'Unknown'}
+COMPANY AI STRATEGY: ${research.aiStrategy || 'Unknown'}
+COMPANY ANGLE: ${research.angle || 'Unknown'}
+
+CANDIDATE BACKGROUND (key points):
+${cvContent.substring(0, 2000)}
+
+Return ONLY a JSON array of objects: [{"question": "...", "coachingNote": "...", "category": "leadership|technical|culture-fit|conflict|growth"}]`;
+
+        const behavRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 2048,
+            messages: [{ role: 'user', content: behavioralPrompt }],
+          }),
+        });
+
+        if (behavRes.ok) {
+          const behavData = await behavRes.json();
+          const rawText = behavData.content?.[0]?.text || '';
+          try {
+            const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+            behavioralQuestions = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+          } catch {
+            behavioralQuestions = [];
+          }
+        }
+      } catch (e) {
+        log('WARN', `[Workflow] Behavioral questions generation failed: ${e.message}`);
+      }
+    }
+
+    // Step 4: Pull relevant STAR stories
+    const storyContent = await readSafeAsync(PATHS.storyBank);
     const storySections = parseMdSections(storyContent);
     const stories = storySections.filter(s => s.level === 2).map(s => ({
       title: s.title,
@@ -2495,6 +2784,7 @@ app.post('/api/workflow/interview-prep', async (req, res) => {
       role: role || '',
       research,
       prepContent,
+      behavioralQuestions,
       stories,
     });
   } catch (err) {
@@ -2506,10 +2796,10 @@ app.post('/api/workflow/interview-prep', async (req, res) => {
 /**
  * POST /api/workflow/follow-up-batch -- Generate follow-up drafts for overdue applications.
  */
-app.post('/api/workflow/follow-up-batch', async (req, res) => {
+app.post('/api/workflow/follow-up-batch', apiProxyLimiter, async (req, res) => {
   try {
     const base = `http://localhost:${PORT}`;
-    const trackerContent = readSafe(PATHS.tracker);
+    const trackerContent = await readSafeAsync(PATHS.tracker);
     const trackerRows = parseTracker(trackerContent);
 
     // Find overdue: Applied > 5 days ago
@@ -2556,13 +2846,7 @@ app.post('/api/workflow/follow-up-batch', async (req, res) => {
   }
 });
 
-// Helper for server-side tier classification (mirrors frontend classifyTier)
-function classifyTierServer(role) {
-  const r = (role || '').toLowerCase();
-  if (/\b(vp|vice president|c-suite|chief|cto|cio|coo|ceo|caio|cmo|svp|evp|president)\b/.test(r)) return 'c-suite';
-  if (/\b(director|head of|principal)\b/.test(r)) return 'director';
-  return 'other';
-}
+// classifyTier -- imported from lib/parsers.mjs
 
 // ---------------------------------------------------------------------------
 // API Routes -- Proactive Notifications
@@ -2571,16 +2855,18 @@ function classifyTierServer(role) {
 /**
  * GET /api/notifications -- Returns active notifications based on system state.
  */
-app.get('/api/notifications', (req, res) => {
+app.get('/api/notifications', async (req, res) => {
   try {
     const notifications = [];
     let nextId = 1;
 
-    const trackerContent = readSafe(PATHS.tracker);
+    const [trackerContent, pipelineContent, scanContent] = await Promise.all([
+      readSafeAsync(PATHS.tracker),
+      readSafeAsync(PATHS.pipeline),
+      readSafeAsync(PATHS.scanHistory),
+    ]);
     const trackerRows = parseTracker(trackerContent);
-    const pipelineContent = readSafe(PATHS.pipeline);
     const pipelineEntries = parsePipeline(pipelineContent);
-    const scanContent = readSafe(PATHS.scanHistory);
     const scanRows = parseScanHistory(scanContent);
 
     // 1. Overdue follow-ups (Applied > 5 days ago)
@@ -2665,10 +2951,9 @@ app.get('/api/notifications', (req, res) => {
       });
     }
 
-    // 6. Pending action items from memory
+    // 6. Pending action items from memory (async)
     const memoryPath = join(ROOT, 'data', 'agent-memory.json');
-    let memories = { careerFacts: [], preferences: [], actionItems: [], conversations: [] };
-    try { memories = JSON.parse(readFileSync(memoryPath, 'utf-8')); } catch {}
+    const memories = await readJsonSafeAsync(memoryPath, { careerFacts: [], preferences: [], actionItems: [], conversations: [] });
     const pendingActions = (memories.actionItems || []).filter(a => a.status === 'pending');
     if (pendingActions.length > 0) {
       notifications.push({
@@ -2710,11 +2995,12 @@ app.get('/api/notifications', (req, res) => {
 // SPA fallback -- send index.html for any unmatched GET request
 // ---------------------------------------------------------------------------
 
-app.get('/{*splat}', (req, res) => {
+app.get('/{*splat}', async (req, res) => {
   const indexPath = join(PATHS.publicDir, 'index.html');
-  if (existsSync(indexPath)) {
+  try {
+    await access(indexPath);
     res.sendFile(indexPath);
-  } else {
+  } catch {
     res.status(404).json({
       error: 'Frontend not built',
       message: 'No public/index.html found. Create the public/ directory with your SPA build.',
@@ -2743,7 +3029,36 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-wss.on('connection', (clientWs) => {
+// WebSocket connection rate limiting (per-IP, max 5 connections per minute)
+const wsConnectionTimestamps = new Map();
+const WS_CONN_WINDOW_MS = 60_000;
+const WS_CONN_MAX = 5;
+// Maximum incoming WebSocket message size (1MB)
+const WS_MAX_MESSAGE_SIZE = 1 * 1024 * 1024;
+
+wss.on('connection', (clientWs, request) => {
+  // Connection rate limiting
+  const clientIp = request.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let timestamps = wsConnectionTimestamps.get(clientIp) || [];
+  timestamps = timestamps.filter(t => t > now - WS_CONN_WINDOW_MS);
+  if (timestamps.length >= WS_CONN_MAX) {
+    log('WARN', `WebSocket connection rate limit exceeded for ${clientIp}`);
+    clientWs.close(1008, 'Too many connections. Try again later.');
+    return;
+  }
+  timestamps.push(now);
+  wsConnectionTimestamps.set(clientIp, timestamps);
+
+  // Periodic cleanup of stale IP entries
+  if (wsConnectionTimestamps.size > 50) {
+    for (const [ip, ts] of wsConnectionTimestamps) {
+      const fresh = ts.filter(t => t > now - WS_CONN_WINDOW_MS);
+      if (fresh.length === 0) wsConnectionTimestamps.delete(ip);
+      else wsConnectionTimestamps.set(ip, fresh);
+    }
+  }
+
   const geminiKey = process.env.GEMINI_API_KEY;
 
   if (!geminiKey) {
@@ -2774,11 +3089,11 @@ wss.on('connection', (clientWs) => {
     return;
   }
 
-  geminiWs.on('open', () => {
+  geminiWs.on('open', async () => {
     log('INFO', 'Connected to Gemini Live API');
 
-    // Send initial setup message with system instruction
-    const systemInstruction = buildSystemInstruction();
+    // Send initial setup message with system instruction (async)
+    const systemInstruction = await buildSystemInstruction();
     const setupMessage = {
       setup: {
         model: 'models/gemini-2.5-flash-native-audio-latest',
@@ -2889,6 +3204,13 @@ wss.on('connection', (clientWs) => {
 
   // Proxy: Client -> Gemini (translate simple format to Gemini Live API format)
   clientWs.on('message', (data) => {
+    // Enforce message size limit
+    const msgSize = typeof data === 'string' ? data.length : data.byteLength || 0;
+    if (msgSize > WS_MAX_MESSAGE_SIZE) {
+      log('WARN', `WebSocket message too large (${msgSize} bytes), dropping`);
+      clientWs.send(JSON.stringify({ type: 'error', error: 'Message too large. Maximum 1MB.' }));
+      return;
+    }
     if (!geminiClosed && geminiWs && geminiWs.readyState === WebSocket.OPEN) {
       try {
         const raw = data.toString();

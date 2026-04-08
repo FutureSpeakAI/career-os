@@ -170,9 +170,14 @@ Connectivity:
 ```
 career-os/
 +-- CLAUDE.md                     # Agent instructions (the brain)
-+-- dashboard-server.mjs          # Express + WebSocket server
++-- dashboard-server.mjs          # Express + WebSocket server (43 API routes)
 +-- public/index.html             # Web dashboard SPA
 +-- dashboard-web.mjs             # Static dashboard generator (fallback)
++-- lib/                           # Shared modules
+|   +-- parsers.mjs               # Markdown/YAML/TSV parsing (pure functions)
+|   +-- intelligence.mjs          # Proof points, summarization, title filtering
+|   +-- compression.mjs           # Gzip/deflate response compression
+|   +-- cache-headers.mjs         # ETag-based cache validation
 +-- cv.md                         # Your CV (you create this)
 +-- config/
 |   +-- profile.example.yml      # Template for your profile
@@ -215,7 +220,10 @@ npm run dedup          # Remove duplicate entries
 npm run normalize      # Fix non-canonical statuses
 npm run pdf            # Generate PDF from HTML
 npm run sync-check     # Validate CV/profile/portals consistency
-npm test               # Run test suite
+npm test               # Run full test suite (184 tests)
+npm run test:unit      # Unit tests only (parsers, intelligence)
+npm run test:integration  # Integration tests (HTTP endpoints, lib modules)
+npm run test:scripts   # Script tests (merge, normalize, verify)
 ```
 
 ## Tech Stack
@@ -227,7 +235,25 @@ npm test               # Run test suite
 - **PDF**: Playwright + HTML template (Space Grotesk + DM Sans)
 - **Scanner**: Playwright + Greenhouse API + WebSearch
 - **Data**: Markdown tables + YAML config + TSV batch files + JSON memory
-- **Tests**: Node.js built-in test runner
+- **Tests**: Node.js built-in test runner (184 tests across 7 files)
+
+## Security and Performance
+
+- **CORS**: Restricted to localhost origins only
+- **Rate Limiting**: In-memory sliding window (10/min AI proxy, 30/min writes, 120/min reads)
+- **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, CSP, Referrer-Policy
+- **WebSocket Hardening**: Connection rate limit per IP, 1MB message cap, keep-alive pings
+- **Async I/O**: All file reads non-blocking (`fs/promises`)
+- **Gzip Compression**: Automatic response compression for JSON payloads >1KB
+- **ETag Caching**: File-backed ETags with 304 Not Modified for unchanged data
+- **Pipeline Pagination**: `GET /api/pipeline?page=1&limit=50&tier=c-suite&q=searchterm`
+- **Memory Dedup**: Duplicate career facts and action items are automatically skipped
+- **Data Integrity**: Duplicate URL detection in pipeline, duplicate company+role detection in tracker
+- **Actionable Errors**: All error responses include `hint` fields with fix instructions
+- **Conversation Summarization**: Long chat histories compressed to preserve context within token limits
+- **Smart Title Filtering**: Portal scan results filtered by positive/negative keywords
+- **Error Recovery**: Tab-level error states with retry, toast notification stacking with dedup, modal keyboard navigation (Escape to close, click outside)
+- **Workflow Orchestration**: Multi-step endpoints (full-pipeline, interview-prep, follow-up-batch)
 
 ## Connectors
 

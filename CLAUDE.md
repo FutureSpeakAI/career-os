@@ -22,9 +22,13 @@ AI-powered career advancement operating system built on Claude Code: pipeline tr
 | `portals.yml` | Query and company config |
 | `templates/cv-template.html` | HTML template for CVs |
 | `generate-pdf.mjs` | Puppeteer: HTML to PDF |
-| `dashboard-server.mjs` | Express + WebSocket server for web dashboard |
+| `dashboard-server.mjs` | Express + WebSocket server for web dashboard (43 routes) |
 | `dashboard-web.mjs` | Static HTML dashboard generator (fallback) |
 | `public/index.html` | Web dashboard SPA (12 tabs, voice agent) |
+| `lib/parsers.mjs` | Shared parsing functions (Markdown tables, YAML, pipeline, tracker) |
+| `lib/intelligence.mjs` | AI helpers (proof point extraction, summarization, title filtering) |
+| `lib/compression.mjs` | Gzip/deflate response compression middleware |
+| `lib/cache-headers.mjs` | ETag-based cache validation middleware |
 | `article-digest.md` | Compact proof points from portfolio (optional) |
 | `interview-prep/story-bank.md` | Accumulated STAR+R stories across evaluations |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`) |
@@ -143,8 +147,9 @@ This system is designed to be customized by YOU (Claude). When the user asks you
 
 - Node.js (mjs modules), Express 5 (server), WebSocket/ws (Gemini proxy), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data)
 - Scripts in `.mjs`, configuration in YAML
-- Dashboard server: `dashboard-server.mjs` (Express + WS, 34 API routes, Gemini Live voice proxy, Claude chat with tool use)
-- Tests: `__tests__/*.test.mjs` via `node --test` (no external test framework)
+- Dashboard server: `dashboard-server.mjs` (Express 5 + WS, 43 API routes, Gemini Live voice proxy, Claude chat with tool use)
+- Shared modules: `lib/parsers.mjs` (data parsing), `lib/intelligence.mjs` (proof points, summarization, title filtering), `lib/compression.mjs` (gzip middleware), `lib/cache-headers.mjs` (ETag/304 caching)
+- Tests: `__tests__/*.test.mjs` via `node --test` (no external test framework), 184 tests across 7 test files
 - Output in `output/` (gitignored), Reports in `reports/`
 - JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md)
 - Batch in `batch/` (gitignored except scripts and prompt)
@@ -172,6 +177,32 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 9. `notes` -- one-line summary
 
 **Note:** In applications.md, score comes BEFORE status. The merge script handles this column swap automatically.
+
+### API Features
+
+| Feature | Details |
+|---------|---------|
+| **Rate Limiting** | In-memory sliding window: 10/min AI proxy, 30/min writes, 120/min reads |
+| **CORS** | Restricted to localhost origins only (configurable port allowlist) |
+| **Security Headers** | X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, CSP |
+| **WebSocket Hardening** | Connection rate limit (5/min per IP), 1MB message size cap, keep-alive pings |
+| **Async I/O** | All file reads use async `fs/promises` (no blocking sync reads in handlers) |
+| **Gzip Compression** | `lib/compression.mjs` -- auto-compresses JSON responses >1KB via gzip/deflate |
+| **ETag Caching** | `lib/cache-headers.mjs` -- file-backed ETags, 304 Not Modified for unchanged data |
+| **Pipeline Pagination** | `GET /api/pipeline?page=1&limit=50&tier=c-suite&q=google` |
+| **Memory Dedup** | `save_memory` and `/api/memory/extract` skip duplicate career facts and action items |
+| **Data Integrity** | `POST /api/pipeline/add` deduplicates URLs; `GET /api/tracker/duplicates` finds duplicate company+role entries |
+| **Error Propagation** | Tool execution errors flagged with `is_error: true` for Claude API tool_result blocks |
+| **Actionable Errors** | All 4xx/5xx responses include `hint` field with user-facing fix instructions |
+| **Proof Points** | `lib/intelligence.mjs` auto-extracts quantified achievements from CV for voice agent context |
+| **Conversation Summarization** | Long chat histories (>20 messages) are locally summarized to preserve context within token limits |
+| **Smart Title Filtering** | Portal scan results filtered by positive/negative keywords from `portals.yml` |
+| **Skeleton Loaders** | All dashboard sections show animated placeholders until data loads |
+| **Error Recovery** | Tab-level error states with retry buttons; global unhandled rejection boundary |
+| **Toast Stacking** | Max 5 visible toasts, dedup within 2s window, dismiss buttons |
+| **Modal Keyboard** | Escape to close, click-outside-to-close, focus restoration |
+| **Workflow Endpoints** | `full-pipeline`, `interview-prep`, `follow-up-batch` -- multi-step orchestrated actions |
+| **Smart Recommendations** | Priority-scored suggestions with urgency levels, stats, and weekly goals |
 
 ### Pipeline Integrity
 
